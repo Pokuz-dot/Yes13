@@ -404,7 +404,10 @@ public partial class MainWindow
                         try
                         {
                             ClubLogic.TransitionOrderStatus(order, nextStatus, ready);
-                            ShowToast($"{order.OrderNum}: статус изменен на '{order.Status}'");
+                            if (!Database.UpdateOrderStatus(order, out string dbErr))
+                                ShowToast($"Ошибка БД: {dbErr}");
+                            else
+                                ShowToast($"{order.OrderNum}: статус изменен на '{order.Status}'");
                             ShowClubPage();
                         }
                         catch (InvalidOperationException ex)
@@ -667,6 +670,12 @@ public partial class MainWindow
                 }
             };
 
+            if (!Database.AddOrder(newOrder, out string dbErr))
+            {
+                ShowToast($"Ошибка сохранения в БД: {dbErr}");
+                return;
+            }
+
             _data.Orders.Insert(0, newOrder);
             CloseModal();
             ShowToast($"Создана запись {newOrder.OrderNum}");
@@ -720,8 +729,11 @@ public partial class MainWindow
                     ClubLogic.OrderStatuses.CancelledVet,
                     horseReadyForTraining: true,
                     cancelReason: reasonBox.Text);
+                if (!Database.UpdateOrderStatus(order, out string dbErr))
+                    ShowToast($"Ошибка БД: {dbErr}");
+                else
+                    ShowToast($"{order.OrderNum}: отмена по ветпоказаниям");
                 CloseModal();
-                ShowToast($"{order.OrderNum}: отмена по ветпоказаниям");
                 ShowClubPage();
             }
             catch (InvalidOperationException ex)
@@ -1444,7 +1456,7 @@ public partial class MainWindow
                 _ => ("Клубный безлимит", 20m, "Безлимит")
             };
 
-            _data.Riders.Add(new ClubRider
+            var newRider = new ClubRider
             {
                 Id = _data.NextRiderId++,
                 FullName = txtName.Text.Trim(),
@@ -1453,10 +1465,17 @@ public partial class MainWindow
                 DiscountRate = disc,
                 MembershipName = mName,
                 RemainingSessions = rem
-            });
+            };
 
+            if (!Database.AddRider(newRider, out string dbErr))
+            {
+                ShowToast($"Ошибка сохранения в БД: {dbErr}");
+                return;
+            }
+
+            _data.Riders.Add(newRider);
             CloseModal();
-            ShowToast($"Добавлен всадник {txtName.Text.Trim()}");
+            ShowToast($"Добавлен всадник {newRider.FullName}");
             ShowClubPage();
         };
 

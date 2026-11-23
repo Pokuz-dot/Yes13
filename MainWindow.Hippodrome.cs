@@ -361,7 +361,14 @@ public partial class MainWindow
                 btnToggleVet.Classes.Add(horse.IsReadyForTraining ? "table-danger" : "table-success");
                 btnToggleVet.Click += (_, _) =>
                 {
-                    horse.IsReadyForTraining = !horse.IsReadyForTraining;
+                    bool newState = !horse.IsReadyForTraining;
+                    if (!Database.UpdateHorseVetStatus(horse.Id, newState, out string dbErr))
+                    {
+                        ShowToast($"Ошибка БД: {dbErr}");
+                        return;
+                    }
+
+                    horse.IsReadyForTraining = newState;
                     ShowToast(horse.IsReadyForTraining
                         ? $"{horse.Nickname}: допущена к тренировкам"
                         : $"{horse.Nickname}: отправлена на веткарантин (запись в манеж закрыта)");
@@ -478,7 +485,7 @@ public partial class MainWindow
             int id = _data.NextHorseId++;
             string nickname = txtNickname.Text.Trim();
 
-            _data.Horses.Add(new HorseItem
+            var newHorse = new HorseItem
             {
                 Id = id,
                 BreedId = breed.Id,
@@ -490,12 +497,20 @@ public partial class MainWindow
                 BirthYear = birthYear,
                 SuitColor = string.IsNullOrWhiteSpace(txtColor.Text) ? "Гнедая" : txtColor.Text.Trim(),
                 IsReadyForTraining = chkReady.IsChecked == true
-            });
+            };
+
+            if (!Database.AddHorse(newHorse, out string dbErr))
+            {
+                ShowToast($"Ошибка сохранения в БД: {dbErr}");
+                return;
+            }
+
+            _data.Horses.Add(newHorse);
 
             _data.Rations.Add(new FeedingRationItem
             {
-                Id = id,
-                HorseId = id,
+                Id = newHorse.Id,
+                HorseId = newHorse.Id,
                 HorseName = nickname,
                 StallCode = "Без денника",
                 MorningFeed = "Овёс 2.0 кг, Сено 4 кг",

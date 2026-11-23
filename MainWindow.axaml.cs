@@ -308,10 +308,42 @@ public partial class MainWindow : Window
                         FontSize = 12,
                         Foreground = _textDarkBrown,
                         TextWrapping = TextWrapping.Wrap
+                    },
+                    new TextBlock
+                    {
+                        Text = Database.IsConnected
+                            ? "БД: MySQL (Yes) подключена"
+                            : "БД: автономный режим",
+                        FontSize = 11,
+                        FontWeight = FontWeight.SemiBold,
+                        Foreground = Database.IsConnected ? Brush.Parse("#2E7D32") : _textMutedBrown
                     }
                 }
             }
         });
+
+        var btnRefreshDb = new Button
+        {
+            Content = "Обновить данные из БД",
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        btnRefreshDb.Classes.Add("secondary");
+        btnRefreshDb.Click += (_, _) =>
+        {
+            _profilePopup?.Close();
+            if (Database.LoadAll(_data, out string err))
+            {
+                ShowToast("Данные обновлены из MySQL");
+                if (BtnHippodrome.Classes.Contains("active"))
+                    ShowHippodromePage();
+                else
+                    ShowClubPage();
+            }
+            else
+            {
+                ShowToast($"Нет связи с БД: {err}");
+            }
+        };
 
         var btnSwitchRole = new Button
         {
@@ -366,6 +398,7 @@ public partial class MainWindow : Window
             ShowLogin();
         };
 
+        cardContent.Children.Add(btnRefreshDb);
         cardContent.Children.Add(btnSwitchRole);
         cardContent.Children.Add(btnLogout);
 
@@ -455,7 +488,7 @@ public partial class MainWindow : Window
 
         var demoHint = new TextBlock
         {
-            Text = "Демо-режим: admin или bereitor (любой пароль)",
+            Text = "БД Yes: admin или bereitor (пароль 123456)",
             FontSize = 11,
             Foreground = _textMutedBrown,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -479,6 +512,22 @@ public partial class MainWindow : Window
                 return;
             }
 
+            var dbUser = Database.Login(login, password, out bool dbAvailable, out string dbError);
+            if (dbAvailable)
+            {
+                if (dbUser == null)
+                {
+                    ShowPopupError(txtPassword, dbError);
+                    return;
+                }
+
+                _data.CurrentUser = dbUser;
+                Database.LoadAll(_data, out _);
+                OnLoginSuccess();
+                ShowToast("Подключено к базе данных Yes");
+                return;
+            }
+
             bool isBereitor = login.Contains("bereitor", StringComparison.OrdinalIgnoreCase)
                 || login.Contains("zoo", StringComparison.OrdinalIgnoreCase);
 
@@ -496,6 +545,7 @@ public partial class MainWindow : Window
             };
 
             OnLoginSuccess();
+            ShowToast("MySQL недоступна, открыт автономный режим");
         };
 
         linkRegister.PointerPressed += (_, _) => ShowRegister();
@@ -611,16 +661,35 @@ public partial class MainWindow : Window
             }
 
             bool isBereitor = roleBox.SelectedIndex == 1;
+            int roleId = isBereitor ? 1 : 2;
+
+            var dbUser = Database.Register(fullName, login, password, roleId, out bool dbAvailable, out string dbError);
+            if (dbAvailable)
+            {
+                if (dbUser == null)
+                {
+                    ShowPopupError(txtLogin, dbError);
+                    return;
+                }
+
+                _data.CurrentUser = dbUser;
+                Database.LoadAll(_data, out _);
+                OnLoginSuccess();
+                ShowToast("Пользователь сохранен в базе данных Yes");
+                return;
+            }
+
             _data.CurrentUser = new UserProfile
             {
                 Id = 3,
-                RoleId = isBereitor ? 1 : 2,
+                RoleId = roleId,
                 RoleName = isBereitor ? _data.Roles[0].Name : _data.Roles[1].Name,
                 Login = login,
                 FullName = fullName
             };
 
             OnLoginSuccess();
+            ShowToast("MySQL недоступна, открыт автономный режим");
         };
 
         linkLogin.PointerPressed += (_, _) => ShowLogin();
