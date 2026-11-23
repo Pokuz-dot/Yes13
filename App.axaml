@@ -59,7 +59,6 @@
         <Style Selector="Button:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#F57C00"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
             <Setter Property="TextBlock.Foreground" Value="White"/>
         </Style>
 
@@ -86,7 +85,6 @@
         <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#EFE7DE"/>
             <Setter Property="BorderBrush" Value="#4E342E"/>
-            <Setter Property="Foreground" Value="#3E2723"/>
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
@@ -114,7 +112,6 @@
         <Style Selector="Button.table-secondary:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#EFE7DE"/>
             <Setter Property="BorderBrush" Value="#4E342E"/>
-            <Setter Property="Foreground" Value="#3E2723"/>
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
@@ -133,7 +130,6 @@
         <Style Selector="Button.table-danger:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#FFCDD2"/>
             <Setter Property="BorderBrush" Value="#E57373"/>
-            <Setter Property="Foreground" Value="#B71C1C"/>
             <Setter Property="TextBlock.Foreground" Value="#B71C1C"/>
         </Style>
 
@@ -152,7 +148,6 @@
         <Style Selector="Button.table-success:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#C8E6C9"/>
             <Setter Property="BorderBrush" Value="#81C784"/>
-            <Setter Property="Foreground" Value="#1B5E20"/>
             <Setter Property="TextBlock.Foreground" Value="#1B5E20"/>
         </Style>
 
@@ -211,7 +206,6 @@
         <Style Selector="Button.profile-btn:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#EFE7DE"/>
             <Setter Property="BorderBrush" Value="#8D6E63"/>
-            <Setter Property="Foreground" Value="#3E2723"/>
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
@@ -230,7 +224,6 @@
         <Style Selector="Button.timer-btn:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#E65100"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
             <Setter Property="TextBlock.Foreground" Value="White"/>
         </Style>
 
@@ -249,7 +242,6 @@
         <Style Selector="Button.subtab-club:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#EFE7DE"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#3E2723"/>
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
@@ -261,7 +253,6 @@
         <Style Selector="Button.subtab-club.active:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#F57C00"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
             <Setter Property="TextBlock.Foreground" Value="White"/>
         </Style>
 
@@ -281,7 +272,6 @@
         <Style Selector="Button.subtab-hippo:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#EFE7DE"/>
             <Setter Property="BorderBrush" Value="#8D6E63"/>
-            <Setter Property="Foreground" Value="#3E2723"/>
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
@@ -296,7 +286,6 @@
         <Style Selector="Button.subtab-hippo.active:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#FAF6F2"/>
             <Setter Property="BorderBrush" Value="#E65100"/>
-            <Setter Property="Foreground" Value="#3E2723"/>
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
     </Application.Styles>
