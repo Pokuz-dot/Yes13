@@ -36,7 +36,7 @@
                                            FontSize="15"
                                            FontWeight="Bold"
                                            Foreground="#3E2723" />
-                                <TextBlock Text="Шифр: КСК, ПР-23"
+                                <TextBlock Text="Конноспортивный клуб"
                                            FontSize="11"
                                            Foreground="#8D6E63" />
                             </StackPanel>

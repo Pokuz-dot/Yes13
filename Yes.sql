@@ -156,6 +156,7 @@ CREATE TABLE `client_requests` (
   `requested_datetime` datetime NOT NULL,
   `estimated_cost` decimal(10,2) NOT NULL DEFAULT 0.00,
   `comment` varchar(255) DEFAULT NULL,
+  `equipment_code` varchar(40) DEFAULT NULL,
   `status` varchar(40) NOT NULL DEFAULT 'На рассмотрении',
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -163,9 +164,9 @@ CREATE TABLE `client_requests` (
   CONSTRAINT `fk_requests_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-INSERT INTO `client_requests` (`id`, `user_id`, `requester_name`, `request_type`, `target_name`, `horse_id`, `arena_zone`, `duration_minutes`, `has_trainer`, `requested_datetime`, `estimated_cost`, `comment`, `status`) VALUES
-(1, 3, 'Петров Максим Игоревич', 'Тренировка и манеж', 'Буцефал', 1, 'Конкурный манеж', 45, 1, '2026-11-23 16:00:00', 2500.00, 'Первое занятие по конкуру с тренером', 'На рассмотрении'),
-(2, 3, 'Петров Максим Игоревич', 'Аренда снаряжения', 'EQ-003 Шлем тренировочный Fouganza C500', NULL, 'Склад амуниции', 45, 0, '2026-11-23 16:00:00', 200.00, 'Размер L на время занятия', 'На рассмотрении');
+INSERT INTO `client_requests` (`id`, `user_id`, `requester_name`, `request_type`, `target_name`, `horse_id`, `arena_zone`, `duration_minutes`, `has_trainer`, `requested_datetime`, `estimated_cost`, `comment`, `equipment_code`, `status`) VALUES
+(1, 3, 'Петров Максим Игоревич', 'Тренировка и манеж', 'Буцефал', 1, 'Конкурный манеж', 45, 1, '2026-11-23 16:00:00', 2500.00, 'Первое занятие по конкуру с тренером', 'AUTO', 'На рассмотрении'),
+(2, 3, 'Петров Максим Игоревич', 'Аренда снаряжения', 'EQ-003 Шлем тренировочный Fouganza C500', NULL, 'Склад амуниции', 45, 0, '2026-11-23 16:00:00', 200.00, 'Размер L на время занятия', 'EQ-003', 'На рассмотрении');
 
 COMMIT;
 

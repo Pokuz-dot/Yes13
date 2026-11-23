@@ -47,6 +47,7 @@ public static class Database
               requested_datetime datetime NOT NULL,
               estimated_cost decimal(10,2) NOT NULL DEFAULT 0.00,
               comment varchar(255) DEFAULT NULL,
+              equipment_code varchar(40) DEFAULT NULL,
               status varchar(40) NOT NULL DEFAULT 'На рассмотрении',
               created_at datetime NOT NULL DEFAULT current_timestamp(),
               PRIMARY KEY (id),
@@ -54,8 +55,25 @@ public static class Database
               CONSTRAINT fk_requests_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
 
-        using var reqCmd = new MySqlCommand(reqTableSql, conn);
-        reqCmd.ExecuteNonQuery();
+        using (var reqCmd = new MySqlCommand(reqTableSql, conn))
+        {
+            reqCmd.ExecuteNonQuery();
+        }
+
+        const string checkColSql = @"
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'client_requests'
+              AND COLUMN_NAME = 'equipment_code';";
+
+        using var colCheckCmd = new MySqlCommand(checkColSql, conn);
+        long hasCol = Convert.ToInt64(colCheckCmd.ExecuteScalar());
+        if (hasCol == 0)
+        {
+            using var alterCmd = new MySqlCommand("ALTER TABLE client_requests ADD COLUMN equipment_code varchar(40) DEFAULT NULL;", conn);
+            alterCmd.ExecuteNonQuery();
+        }
     }
 
     public static UserProfile? Login(string login, string password, out bool dbAvailable, out string error)
@@ -400,7 +418,7 @@ public static class Database
             const string reqSql = @"
                 SELECT id, user_id, requester_name, request_type, target_name, horse_id,
                        arena_zone, duration_minutes, has_trainer, requested_datetime,
-                       estimated_cost, comment, status, created_at
+                       estimated_cost, comment, equipment_code, status, created_at
                 FROM client_requests
                 ORDER BY id DESC;";
 
@@ -423,6 +441,7 @@ public static class Database
                         RequestedDateTime = Convert.ToDateTime(reader["requested_datetime"]),
                         EstimatedCost = Convert.ToDecimal(reader["estimated_cost"]),
                         Comment = reader["comment"] == DBNull.Value ? string.Empty : reader["comment"]?.ToString() ?? string.Empty,
+                        EquipmentCode = reader["equipment_code"] == DBNull.Value ? string.Empty : reader["equipment_code"]?.ToString() ?? string.Empty,
                         Status = reader["status"]?.ToString() ?? "На рассмотрении",
                         CreatedAt = Convert.ToDateTime(reader["created_at"])
                     });
@@ -457,8 +476,8 @@ public static class Database
 
             const string sql = @"
                 INSERT INTO client_requests
-                (user_id, requester_name, request_type, target_name, horse_id, arena_zone, duration_minutes, has_trainer, requested_datetime, estimated_cost, comment, status)
-                VALUES (@uid, @name, @type, @target, @hid, @arena, @dur, @trainer, @dt, @cost, @comment, @status);";
+                (user_id, requester_name, request_type, target_name, horse_id, arena_zone, duration_minutes, has_trainer, requested_datetime, estimated_cost, comment, equipment_code, status)
+                VALUES (@uid, @name, @type, @target, @hid, @arena, @dur, @trainer, @dt, @cost, @comment, @eq, @status);";
 
             using var cmd = new MySqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@uid", req.UserId);
@@ -472,6 +491,7 @@ public static class Database
             cmd.Parameters.AddWithValue("@dt", req.RequestedDateTime);
             cmd.Parameters.AddWithValue("@cost", req.EstimatedCost);
             cmd.Parameters.AddWithValue("@comment", string.IsNullOrWhiteSpace(req.Comment) ? DBNull.Value : req.Comment);
+            cmd.Parameters.AddWithValue("@eq", string.IsNullOrWhiteSpace(req.EquipmentCode) ? DBNull.Value : req.EquipmentCode);
             cmd.Parameters.AddWithValue("@status", req.Status);
             cmd.ExecuteNonQuery();
             req.Id = (int)cmd.LastInsertedId;
@@ -525,6 +545,56 @@ public static class Database
             cmd.Parameters.AddWithValue("@roleId", newRoleId);
             cmd.Parameters.AddWithValue("@id", userId);
             cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool UpdateUserCredentials(int userId, string newLogin, string? newPassword, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            using (var checkCmd = new MySqlCommand("SELECT COUNT(*) FROM users WHERE login = @login AND id <> @id;", conn))
+            {
+                checkCmd.Parameters.AddWithValue("@login", newLogin);
+                checkCmd.Parameters.AddWithValue("@id", userId);
+                long count = Convert.ToInt64(checkCmd.ExecuteScalar());
+                if (count > 0)
+                {
+                    error = "Такой логин уже занят другим пользователем";
+                    return false;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(newPassword))
+            {
+                const string sql = "UPDATE users SET login = @login WHERE id = @id;";
+                using var cmd = new MySqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@login", newLogin);
+                cmd.Parameters.AddWithValue("@id", userId);
+                cmd.ExecuteNonQuery();
+            }
+            else
+            {
+                const string sql = "UPDATE users SET login = @login, password_hash = @hash WHERE id = @id;";
+                using var cmd = new MySqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@login", newLogin);
+                cmd.Parameters.AddWithValue("@hash", HashPassword(newPassword));
+                cmd.Parameters.AddWithValue("@id", userId);
+                cmd.ExecuteNonQuery();
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -767,16 +837,30 @@ public static class Database
 
         foreach (var req in data.Requests.Where(r => r.Status == "Одобрено"))
         {
-            if (req.RequestType == "Аренда снаряжения")
+            if (req.RequestType == "Тренировка и манеж" && !string.IsNullOrWhiteSpace(req.EquipmentCode))
+            {
+                var activeOrder = data.Orders.FirstOrDefault(o =>
+                    !ClubLogic.IsClosedStatus(o.Status)
+                    && o.RiderName.Equals(req.RequesterName, StringComparison.OrdinalIgnoreCase)
+                    && o.OrderDate == req.RequestedDateTime);
+                if (activeOrder != null)
+                {
+                    ClubLogic.AutoAssignEquipment(data.Equipment, req.EquipmentCode, req.RequesterName, activeOrder.OrderNum);
+                }
+            }
+            else if (req.RequestType == "Аренда снаряжения")
             {
                 var equip = data.Equipment.FirstOrDefault(e =>
                     req.TargetName.StartsWith(e.InventoryCode, StringComparison.OrdinalIgnoreCase)
                     || req.TargetName.Contains(e.Name, StringComparison.OrdinalIgnoreCase));
                 if (equip != null && equip.Status == "Свободно")
                 {
+                    var activeOrder = data.Orders.FirstOrDefault(o =>
+                        !ClubLogic.IsClosedStatus(o.Status)
+                        && o.RiderName.Equals(req.RequesterName, StringComparison.OrdinalIgnoreCase));
                     equip.Status = "В аренде";
                     equip.RentedByRider = req.RequesterName;
-                    equip.OrderNum = "Одобрено по заявке";
+                    equip.OrderNum = activeOrder?.OrderNum ?? "Аренда по заявке";
                 }
             }
             else if (req.RequestType == "Бронь денника")

@@ -744,6 +744,8 @@ public partial class MainWindow
 
     private void ApproveClientRequest(ClientRequestItem req)
     {
+        string autoDetails = string.Empty;
+
         if (req.RequestType == "Тренировка и манеж")
         {
             var horse = req.HorseId.HasValue
@@ -814,6 +816,11 @@ public partial class MainWindow
             }
 
             _data.Orders.Insert(0, order);
+
+            var bookedCodes = ClubLogic.AutoAssignEquipment(_data.Equipment, req.EquipmentCode, req.RequesterName, order.OrderNum);
+            autoDetails = bookedCodes.Count > 0
+                ? $" | Заказ {order.OrderNum} + автобронь снаряжения: {string.Join(", ", bookedCodes)}"
+                : $" | Заказ {order.OrderNum} создан автоматически";
         }
         else if (req.RequestType == "Аренда снаряжения")
         {
@@ -823,9 +830,14 @@ public partial class MainWindow
 
             if (equip != null)
             {
+                var activeOrder = _data.Orders.FirstOrDefault(o =>
+                    !ClubLogic.IsClosedStatus(o.Status)
+                    && o.RiderName.Equals(req.RequesterName, StringComparison.OrdinalIgnoreCase));
+
                 equip.Status = "В аренде";
                 equip.RentedByRider = req.RequesterName;
-                equip.OrderNum = "Одобрено по заявке";
+                equip.OrderNum = activeOrder?.OrderNum ?? "Аренда по заявке";
+                autoDetails = $" | {equip.InventoryCode} автоматически выдан в аренду";
             }
         }
         else if (req.RequestType == "Бронь денника")
@@ -840,6 +852,7 @@ public partial class MainWindow
                 stall.HorseName = string.IsNullOrWhiteSpace(req.Comment) ? "Бронь клиента" : req.Comment;
                 stall.BreedName = "По заявке";
                 stall.ReservedUntil = $"с {req.RequestedDateTime:dd.MM.yyyy}";
+                autoDetails = $" | Денник {stall.StallCode} забронирован автоматически";
             }
         }
 
@@ -850,7 +863,7 @@ public partial class MainWindow
         }
 
         req.Status = "Одобрено";
-        ShowToast($"Заявка от {req.RequesterName} одобрена");
+        ShowToast($"Заявка от {req.RequesterName} одобрена{autoDetails}");
         ShowClubPage();
     }
 
@@ -866,7 +879,7 @@ public partial class MainWindow
         var box = new StackPanel { Spacing = 12 };
         box.Children.Add(CreateModalHeader(
             "Заявка на тренировку и манеж",
-            "После отправки администратор проверит расписание и подтвердит запись"));
+            "После одобрения администратором манеж и выбранное снаряжение бронируются автоматически"));
 
         int selectedIndex = 0;
         if (preselectedHorse != null)
@@ -914,6 +927,23 @@ public partial class MainWindow
             FontSize = 13
         };
 
+        var freeEquip = _data.Equipment.Where(e => e.Status == "Свободно").ToList();
+        var equipOptions = new System.Collections.Generic.List<string>
+        {
+            "Без доп. снаряжения",
+            "Автоподбор комплекта (свободный шлем + седло)"
+        };
+        foreach (var eq in freeEquip)
+            equipOptions.Add($"{eq.InventoryCode} {eq.Name} ({eq.PricePerHour:0} руб./ч)");
+
+        var equipCombo = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = equipOptions,
+            SelectedIndex = 0
+        };
+        equipCombo.Classes.Add("compact");
+
         var commentInput = new TextBox
         {
             PlaceholderText = "Пожелания по занятию (необязательно)"
@@ -934,14 +964,44 @@ public partial class MainWindow
             _ => 45
         };
 
+        decimal SelectedEquipmentCost()
+        {
+            int idx = equipCombo.SelectedIndex;
+            if (idx <= 0)
+                return 0m;
+
+            decimal hours = SelectedMinutes() / 45m;
+            if (idx == 1)
+            {
+                decimal hRate = freeEquip.FirstOrDefault(e => e.Category == "Шлем")?.PricePerHour ?? 0m;
+                decimal sRate = freeEquip.FirstOrDefault(e => e.Category == "Седло")?.PricePerHour ?? 0m;
+                return (hRate + sRate) * hours;
+            }
+
+            var item = freeEquip.ElementAtOrDefault(idx - 2);
+            return item != null ? item.PricePerHour * hours : 0m;
+        }
+
+        string SelectedEquipmentCode()
+        {
+            int idx = equipCombo.SelectedIndex;
+            if (idx <= 0) return string.Empty;
+            if (idx == 1) return "AUTO";
+            return freeEquip.ElementAtOrDefault(idx - 2)?.InventoryCode ?? string.Empty;
+        }
+
         void RefreshCost()
         {
-            decimal cost = ClubLogic.CalculateSessionCost(SelectedMinutes(), chkTrainer.IsChecked == true, 0m);
-            costPreview.Text = $"Предварительная стоимость: {ClubLogic.FormatMoney(cost)}";
+            decimal trainingCost = ClubLogic.CalculateSessionCost(SelectedMinutes(), chkTrainer.IsChecked == true, 0m);
+            decimal eqCost = SelectedEquipmentCost();
+            costPreview.Text = eqCost > 0
+                ? $"Предварительно: {ClubLogic.FormatMoney(trainingCost)} + снаряжение {ClubLogic.FormatMoney(eqCost)}"
+                : $"Предварительная стоимость: {ClubLogic.FormatMoney(trainingCost)}";
         }
 
         durationCombo.SelectionChanged += (_, _) => RefreshCost();
         chkTrainer.IsCheckedChanged += (_, _) => RefreshCost();
+        equipCombo.SelectionChanged += (_, _) => RefreshCost();
         RefreshCost();
 
         var formRow = new Grid
@@ -974,6 +1034,10 @@ public partial class MainWindow
             int minutes = SelectedMinutes();
             bool hasTrainer = chkTrainer.IsChecked == true;
             decimal cost = ClubLogic.CalculateSessionCost(minutes, hasTrainer, 0m);
+            string eqCode = SelectedEquipmentCode();
+            string baseComment = (commentInput.Text ?? string.Empty).Trim();
+            if (!string.IsNullOrEmpty(eqCode) && string.IsNullOrEmpty(baseComment))
+                baseComment = eqCode == "AUTO" ? "С автоподбором комплекта снаряжения" : $"Со снаряжением {eqCode}";
 
             var req = new ClientRequestItem
             {
@@ -988,7 +1052,8 @@ public partial class MainWindow
                 HasTrainer = hasTrainer,
                 RequestedDateTime = dt,
                 EstimatedCost = cost,
-                Comment = (commentInput.Text ?? string.Empty).Trim(),
+                Comment = baseComment,
+                EquipmentCode = eqCode,
                 Status = "На рассмотрении",
                 CreatedAt = DateTime.Now
             };
@@ -1009,6 +1074,7 @@ public partial class MainWindow
         box.Children.Add(CreateFormField("Манеж / Зона", arenaCombo));
         box.Children.Add(formRow);
         box.Children.Add(chkTrainer);
+        box.Children.Add(CreateFormField("Снаряжение (автобронь при одобрении)", equipCombo));
         box.Children.Add(CreateFormField("Комментарий", commentInput));
         box.Children.Add(costPreview);
         box.Children.Add(new StackPanel
@@ -1068,6 +1134,7 @@ public partial class MainWindow
                 RequestedDateTime = dt,
                 EstimatedCost = item.PricePerHour,
                 Comment = string.IsNullOrWhiteSpace(commentInput.Text) ? $"Размер {item.Size}" : commentInput.Text.Trim(),
+                EquipmentCode = item.InventoryCode,
                 Status = "На рассмотрении",
                 CreatedAt = DateTime.Now
             };
@@ -1097,7 +1164,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка управления ролями (только для администратора)
+    // Вкладка управления ролями, логинами и паролями (только для администратора)
 
     private Control BuildAdminUsersTab()
     {
@@ -1116,14 +1183,14 @@ public partial class MainWindow
         Grid.SetRow(searchBox, 0);
         grid.Children.Add(searchBox);
 
-        const string cols = "1.5*,1.1*,1.2*,1.5*,125";
+        const string cols = "1.35*,0.95*,1.25*,1.35*,235";
         var header = CreateTableHeader(cols, new[]
         {
             ("ФИО пользователя", 0),
             ("Логин", 1),
             ("Текущая роль", 2),
             ("Назначить роль", 3),
-            ("Действие", 4)
+            ("Действия", 4)
         }, darkStyle: false);
 
         Grid.SetRow(header, 1);
@@ -1218,18 +1285,14 @@ public partial class MainWindow
                 };
                 roleCombo.Classes.Add("compact");
 
-                Control actionControl;
-                if (isSelf)
+                var actionPanel = new StackPanel
                 {
-                    actionControl = new TextBlock
-                    {
-                        Text = "Текущий профиль",
-                        FontSize = 11,
-                        Foreground = _textMutedBrown,
-                        VerticalAlignment = VerticalAlignment.Center
-                    };
-                }
-                else
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                if (!isSelf)
                 {
                     var btnSaveRole = new Button { Content = "Назначить" };
                     btnSaveRole.Classes.Add("table-btn");
@@ -1254,20 +1317,25 @@ public partial class MainWindow
                         ShowToast($"{user.FullName}: назначена роль '{newRoleName}'");
                         ShowClubPage();
                     };
-                    actionControl = btnSaveRole;
+                    actionPanel.Children.Add(btnSaveRole);
                 }
+
+                var btnEditCreds = new Button { Content = "Логин / Пароль" };
+                btnEditCreds.Classes.Add("table-secondary");
+                btnEditCreds.Click += (_, _) => OpenEditUserCredentialsModal(user);
+                actionPanel.Children.Add(btnEditCreds);
 
                 Grid.SetColumn(cName, 0);
                 Grid.SetColumn(cLogin, 1);
                 Grid.SetColumn(roleBadge, 2);
                 Grid.SetColumn(roleCombo, 3);
-                Grid.SetColumn(actionControl, 4);
+                Grid.SetColumn(actionPanel, 4);
 
                 rowGrid.Children.Add(cName);
                 rowGrid.Children.Add(cLogin);
                 rowGrid.Children.Add(roleBadge);
                 rowGrid.Children.Add(roleCombo);
-                rowGrid.Children.Add(actionControl);
+                rowGrid.Children.Add(actionPanel);
 
                 rowsHost.Children.Add(new Border
                 {
@@ -1287,6 +1355,92 @@ public partial class MainWindow
 
         PopulateRows();
         return grid;
+    }
+
+    private void OpenEditUserCredentialsModal(ManagedUserItem user)
+    {
+        var box = new StackPanel { Spacing = 12 };
+        box.Children.Add(CreateModalHeader(
+            $"Учетные данные: {user.FullName}",
+            $"Роль: {user.RoleName}. Оставьте пароль пустым, чтобы изменить только логин."));
+
+        var txtLogin = new TextBox
+        {
+            Text = user.Login,
+            PlaceholderText = "Минимум 4 символа..."
+        };
+        txtLogin.Classes.Add("compact");
+
+        var txtPassword = new TextBox
+        {
+            PlaceholderText = "Новый пароль (минимум 6 символов)...",
+            PasswordChar = '•'
+        };
+        txtPassword.Classes.Add("compact");
+
+        var btnSave = new Button { Content = "Сохранить" };
+        btnSave.Classes.Add("compact");
+        var btnCancel = new Button { Content = "Отмена" };
+        btnCancel.Classes.Add("secondary");
+        btnCancel.Click += (_, _) => CloseModal();
+
+        btnSave.Click += (_, _) =>
+        {
+            string newLogin = (txtLogin.Text ?? string.Empty).Trim();
+            string newPass = txtPassword.Text ?? string.Empty;
+
+            if (newLogin.Length < 4)
+            {
+                ShowPopupError(txtLogin, "Логин должен быть не менее 4 символов");
+                return;
+            }
+            if (!string.IsNullOrEmpty(newPass) && newPass.Length < 6)
+            {
+                ShowPopupError(txtPassword, "Пароль должен быть не менее 6 символов");
+                return;
+            }
+
+            if (_data.Users.Any(u => u.Id != user.Id && u.Login.Equals(newLogin, StringComparison.OrdinalIgnoreCase)))
+            {
+                ShowPopupError(txtLogin, "Такой логин уже занят");
+                return;
+            }
+
+            string? passToSave = string.IsNullOrWhiteSpace(newPass) ? null : newPass;
+            if (!Database.UpdateUserCredentials(user.Id, newLogin, passToSave, out string err))
+            {
+                ShowToast($"Ошибка БД: {err}");
+                return;
+            }
+
+            user.Login = newLogin;
+            if (passToSave != null)
+                user.OfflinePasswordHash = Database.HashPassword(passToSave);
+
+            if (user.Id == _data.CurrentUser.Id)
+            {
+                _data.CurrentUser.Login = newLogin;
+                UpdateProfilePanel();
+            }
+
+            CloseModal();
+            ShowToast(passToSave != null
+                ? $"{user.FullName}: обновлены логин и пароль"
+                : $"{user.FullName}: логин обновлен на @{newLogin}");
+            ShowClubPage();
+        };
+
+        box.Children.Add(CreateFormField("Логин", txtLogin));
+        box.Children.Add(CreateFormField("Новый пароль (необязательно)", txtPassword));
+        box.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Children = { btnCancel, btnSave }
+        });
+
+        ShowModal(box);
     }
 
     // Вкладка аренды манежа и расписания тренировок
@@ -1532,6 +1686,8 @@ public partial class MainWindow
                             try
                             {
                                 ClubLogic.TransitionOrderStatus(order, nextStatus, ready);
+                                if (ClubLogic.IsClosedStatus(order.Status))
+                                    ClubLogic.ReleaseOrderEquipment(_data.Equipment, order.OrderNum);
                                 if (!Database.UpdateOrderStatus(order, out string dbErr))
                                     ShowToast($"Ошибка БД: {dbErr}");
                                 else
@@ -1856,6 +2012,7 @@ public partial class MainWindow
                     ClubLogic.OrderStatuses.CancelledVet,
                     horseReadyForTraining: true,
                     cancelReason: reasonBox.Text);
+                ClubLogic.ReleaseOrderEquipment(_data.Equipment, order.OrderNum);
                 if (!Database.UpdateOrderStatus(order, out string dbErr))
                     ShowToast($"Ошибка БД: {dbErr}");
                 else
@@ -2486,7 +2643,7 @@ public partial class MainWindow
                 {
                     ColumnDefinitions = new ColumnDefinitions(cols),
                     ColumnSpacing = 8,
-                    Margin = new Thickness(14, 11)
+                    Margin = new Thickness(14, 10)
                 };
 
                 var cName = new TextBlock

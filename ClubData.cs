@@ -175,6 +175,7 @@ public class ClientRequestItem
     public DateTime RequestedDateTime { get; set; } = DateTime.Today.AddHours(16);
     public decimal EstimatedCost { get; set; }
     public string Comment { get; set; } = string.Empty;
+    public string EquipmentCode { get; set; } = string.Empty;
     public string Status { get; set; } = "На рассмотрении";
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
@@ -289,7 +290,7 @@ public static class ClubLogic
 
         var sb = new StringBuilder();
         sb.AppendLine("------------------------------------------------------------");
-        sb.AppendLine("КСК И ИППОДРОМ «АЛЛЮР» (ШИФР: КСК, ГРУППА ПР-23)");
+        sb.AppendLine("КСК И ИППОДРОМ «АЛЛЮР»");
         sb.AppendLine("МАРШРУТНЫЙ ЛИСТ ТРЕНИРОВКИ И АКТ ПРОВЕРКИ СНАРЯЖЕНИЯ");
         sb.AppendLine("------------------------------------------------------------");
         sb.AppendLine($"Документ N:           {order.OrderNum}");
@@ -323,6 +324,59 @@ public static class ClubLogic
 
     public static string FormatMoney(decimal amount) =>
         $"{amount.ToString("#,##0", CultureInfo.GetCultureInfo("ru-RU"))} руб.";
+
+    public static List<string> AutoAssignEquipment(List<EquipmentRentalItem> equipment, string? equipmentCode, string riderName, string orderNum)
+    {
+        var booked = new List<string>();
+        if (string.IsNullOrWhiteSpace(equipmentCode))
+            return booked;
+
+        if (string.Equals(equipmentCode, "AUTO", StringComparison.OrdinalIgnoreCase))
+        {
+            var helmet = equipment.FirstOrDefault(e => e.Status == "Свободно" && e.Category == "Шлем");
+            if (helmet != null)
+            {
+                helmet.Status = "В аренде";
+                helmet.RentedByRider = riderName;
+                helmet.OrderNum = orderNum;
+                booked.Add(helmet.InventoryCode);
+            }
+
+            var saddle = equipment.FirstOrDefault(e => e.Status == "Свободно" && e.Category == "Седло");
+            if (saddle != null)
+            {
+                saddle.Status = "В аренде";
+                saddle.RentedByRider = riderName;
+                saddle.OrderNum = orderNum;
+                booked.Add(saddle.InventoryCode);
+            }
+            return booked;
+        }
+
+        var item = equipment.FirstOrDefault(e =>
+            e.Status == "Свободно"
+            && (e.InventoryCode.Equals(equipmentCode, StringComparison.OrdinalIgnoreCase)
+                || equipmentCode.StartsWith(e.InventoryCode, StringComparison.OrdinalIgnoreCase)));
+        if (item != null)
+        {
+            item.Status = "В аренде";
+            item.RentedByRider = riderName;
+            item.OrderNum = orderNum;
+            booked.Add(item.InventoryCode);
+        }
+
+        return booked;
+    }
+
+    public static void ReleaseOrderEquipment(List<EquipmentRentalItem> equipment, string orderNum)
+    {
+        foreach (var item in equipment.Where(e => e.Status == "В аренде" && e.OrderNum == orderNum))
+        {
+            item.Status = "Свободно";
+            item.RentedByRider = "-";
+            item.OrderNum = "-";
+        }
+    }
 }
 
 // Стартовые данные в памяти (позже заменятся на запросы в MySQL)
@@ -471,7 +525,8 @@ public class MockClubData
                 HasTrainer = true,
                 RequestedDateTime = today.AddHours(16),
                 EstimatedCost = 2500m,
-                Comment = "Первое занятие по конкуру с тренером",
+                Comment = "Первое занятие по конкуру с тренером (автоподбор комплекта)",
+                EquipmentCode = "AUTO",
                 Status = "На рассмотрении",
                 CreatedAt = today.AddHours(9)
             },

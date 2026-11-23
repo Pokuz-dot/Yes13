@@ -296,6 +296,41 @@ public partial class MainWindow : Window
         headerRow.Children.Add(nameStack);
         cardContent.Children.Add(headerRow);
 
+        var infoStack = new StackPanel
+        {
+            Spacing = 4,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "Доступные возможности:",
+                    FontSize = 11,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = _textMediumBrown
+                },
+                new TextBlock
+                {
+                    Text = currentRole.PermissionsSummary,
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    TextWrapping = TextWrapping.Wrap
+                }
+            }
+        };
+
+        if (!IsClient)
+        {
+            infoStack.Children.Add(new TextBlock
+            {
+                Text = Database.IsConnected
+                    ? "БД: MySQL (Yes) подключена"
+                    : "БД: автономный режим",
+                FontSize = 11,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = Database.IsConnected ? Brush.Parse("#2E7D32") : _textMutedBrown
+            });
+        }
+
         cardContent.Children.Add(new Border
         {
             Background = Brush.Parse("#FAF6F2"),
@@ -303,70 +338,45 @@ public partial class MainWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(10, 8),
-            Child = new StackPanel
-            {
-                Spacing = 4,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = "Доступные возможности:",
-                        FontSize = 11,
-                        FontWeight = FontWeight.Bold,
-                        Foreground = _textMediumBrown
-                    },
-                    new TextBlock
-                    {
-                        Text = currentRole.PermissionsSummary,
-                        FontSize = 12,
-                        Foreground = _textDarkBrown,
-                        TextWrapping = TextWrapping.Wrap
-                    },
-                    new TextBlock
-                    {
-                        Text = Database.IsConnected
-                            ? "БД: MySQL (Yes) подключена"
-                            : "БД: автономный режим",
-                        FontSize = 11,
-                        FontWeight = FontWeight.SemiBold,
-                        Foreground = Database.IsConnected ? Brush.Parse("#2E7D32") : _textMutedBrown
-                    }
-                }
-            }
+            Child = infoStack
         });
 
-        var btnRefreshDb = new Button
+        if (!IsClient)
         {
-            Content = "Обновить данные из БД",
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-        btnRefreshDb.Classes.Add("secondary");
-        btnRefreshDb.Click += (_, _) =>
-        {
-            _profilePopup?.Close();
-            if (Database.LoadAll(_data, out string err))
+            var btnRefreshDb = new Button
             {
-                // Синхронизируем роль текущего пользователя из БД, если админ её изменил
-                var updated = _data.Users.FirstOrDefault(u => u.Id == _data.CurrentUser.Id);
-                if (updated != null)
+                Content = "Обновить данные из БД",
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            btnRefreshDb.Classes.Add("secondary");
+            btnRefreshDb.Click += (_, _) =>
+            {
+                _profilePopup?.Close();
+                if (Database.LoadAll(_data, out string err))
                 {
-                    _data.CurrentUser.RoleId = updated.RoleId;
-                    _data.CurrentUser.RoleName = updated.RoleName;
-                    UpdateProfilePanel();
-                    ShiftTimerBox.IsVisible = !IsClient;
-                }
+                    var updated = _data.Users.FirstOrDefault(u => u.Id == _data.CurrentUser.Id);
+                    if (updated != null)
+                    {
+                        _data.CurrentUser.RoleId = updated.RoleId;
+                        _data.CurrentUser.RoleName = updated.RoleName;
+                        _data.CurrentUser.Login = updated.Login;
+                        UpdateProfilePanel();
+                        ShiftTimerBox.IsVisible = !IsClient;
+                    }
 
-                ShowToast("Данные обновлены из MySQL");
-                if (BtnHippodrome.Classes.Contains("active"))
-                    ShowHippodromePage();
+                    ShowToast("Данные обновлены из MySQL");
+                    if (BtnHippodrome.Classes.Contains("active"))
+                        ShowHippodromePage();
+                    else
+                        ShowClubPage();
+                }
                 else
-                    ShowClubPage();
-            }
-            else
-            {
-                ShowToast($"Нет связи с БД: {err}");
-            }
-        };
+                {
+                    ShowToast($"Нет связи с БД: {err}");
+                }
+            };
+            cardContent.Children.Add(btnRefreshDb);
+        }
 
         var btnLogout = new Button
         {
@@ -383,7 +393,6 @@ public partial class MainWindow : Window
             ShowLogin();
         };
 
-        cardContent.Children.Add(btnRefreshDb);
         cardContent.Children.Add(btnLogout);
 
         _profilePopup = new Popup
@@ -841,6 +850,7 @@ public partial class MainWindow : Window
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions(columnsDef),
+            ColumnSpacing = 8,
             Margin = new Thickness(14, 10)
         };
 
