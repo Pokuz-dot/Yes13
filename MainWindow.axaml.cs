@@ -318,19 +318,6 @@ public partial class MainWindow : Window
             }
         };
 
-        if (!IsClient)
-        {
-            infoStack.Children.Add(new TextBlock
-            {
-                Text = Database.IsConnected
-                    ? "БД: MySQL (Yes) подключена"
-                    : "БД: автономный режим",
-                FontSize = 11,
-                FontWeight = FontWeight.SemiBold,
-                Foreground = Database.IsConnected ? Brush.Parse("#2E7D32") : _textMutedBrown
-            });
-        }
-
         cardContent.Children.Add(new Border
         {
             Background = Brush.Parse("#FAF6F2"),
@@ -340,43 +327,6 @@ public partial class MainWindow : Window
             Padding = new Thickness(10, 8),
             Child = infoStack
         });
-
-        if (!IsClient)
-        {
-            var btnRefreshDb = new Button
-            {
-                Content = "Обновить данные из БД",
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
-            btnRefreshDb.Classes.Add("secondary");
-            btnRefreshDb.Click += (_, _) =>
-            {
-                _profilePopup?.Close();
-                if (Database.LoadAll(_data, out string err))
-                {
-                    var updated = _data.Users.FirstOrDefault(u => u.Id == _data.CurrentUser.Id);
-                    if (updated != null)
-                    {
-                        _data.CurrentUser.RoleId = updated.RoleId;
-                        _data.CurrentUser.RoleName = updated.RoleName;
-                        _data.CurrentUser.Login = updated.Login;
-                        UpdateProfilePanel();
-                        ShiftTimerBox.IsVisible = !IsClient;
-                    }
-
-                    ShowToast("Данные обновлены из MySQL");
-                    if (BtnHippodrome.Classes.Contains("active"))
-                        ShowHippodromePage();
-                    else
-                        ShowClubPage();
-                }
-                else
-                {
-                    ShowToast($"Нет связи с БД: {err}");
-                }
-            };
-            cardContent.Children.Add(btnRefreshDb);
-        }
 
         var btnLogout = new Button
         {
