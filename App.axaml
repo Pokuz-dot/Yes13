@@ -5,7 +5,7 @@
 
     <Application.Styles>
         <FluentTheme />
-        
+
         <!-- Общий фон приложения (мягкий песочно-бежевый) -->
         <Style Selector="Window">
             <Setter Property="Background" Value="#EAE0D5"/>
@@ -23,6 +23,25 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
+        <Style Selector="TextBox.compact">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Padding" Value="10,4"/>
+        </Style>
+
+        <!-- Выпадающие списки -->
+        <Style Selector="ComboBox.compact">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="BorderBrush" Value="#8D6E63"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
         <!-- Основные кнопки (оранжевые) -->
         <Style Selector="Button">
             <Setter Property="Background" Value="#E65100"/>
@@ -34,15 +53,110 @@
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
 
-        <!-- Наведение на кнопку -->
         <Style Selector="Button:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#F57C00"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
             <Setter Property="TextBlock.Foreground" Value="White"/>
         </Style>
 
-        <!-- Стили для переключателя -->
+        <!-- Компактная основная кнопка -->
+        <Style Selector="Button.compact">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,0"/>
+        </Style>
+
+        <!-- Вторичная кнопка -->
+        <Style Selector="Button.secondary">
+            <Setter Property="Background" Value="#FAF6F2"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="BorderBrush" Value="#8D6E63"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,0"/>
+        </Style>
+
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#EFE7DE"/>
+            <Setter Property="BorderBrush" Value="#4E342E"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
+        </Style>
+
+        <!-- Кнопки внутри таблиц -->
+        <Style Selector="Button.table-btn">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
+
+        <Style Selector="Button.table-secondary">
+            <Setter Property="Background" Value="#FAF6F2"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="BorderBrush" Value="#8D6E63"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
+
+        <Style Selector="Button.table-secondary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#EFE7DE"/>
+            <Setter Property="BorderBrush" Value="#4E342E"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
+        </Style>
+
+        <Style Selector="Button.table-danger">
+            <Setter Property="Background" Value="#FFEBEE"/>
+            <Setter Property="Foreground" Value="#C62828"/>
+            <Setter Property="BorderBrush" Value="#EF9A9A"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
+
+        <Style Selector="Button.table-danger:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#FFCDD2"/>
+            <Setter Property="BorderBrush" Value="#E57373"/>
+            <Setter Property="Foreground" Value="#B71C1C"/>
+            <Setter Property="TextBlock.Foreground" Value="#B71C1C"/>
+        </Style>
+
+        <Style Selector="Button.table-success">
+            <Setter Property="Background" Value="#E8F5E9"/>
+            <Setter Property="Foreground" Value="#2E7D32"/>
+            <Setter Property="BorderBrush" Value="#A5D6A7"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
+
+        <Style Selector="Button.table-success:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#C8E6C9"/>
+            <Setter Property="BorderBrush" Value="#81C784"/>
+            <Setter Property="Foreground" Value="#1B5E20"/>
+            <Setter Property="TextBlock.Foreground" Value="#1B5E20"/>
+        </Style>
+
+        <!-- Стили для переключателя в верхней панели -->
         <Style Selector="Border.toggle-container">
             <Setter Property="Background" Value="#4E342E"/>
             <Setter Property="CornerRadius" Value="25"/>
@@ -58,14 +172,13 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="CornerRadius" Value="20"/>
             <Setter Property="Width" Value="150"/>
-            <Setter Property="Height" Value="40"/>
+            <Setter Property="Height" Value="38"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
-        <!-- Активная кнопка переключателя -->
         <Style Selector="Button.toggle-btn.active">
             <Setter Property="Background" Value="#E65100"/>
             <Setter Property="Foreground" Value="White"/>
@@ -79,6 +192,112 @@
         <Style Selector="Button.toggle-btn.active:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#F57C00"/>
             <Setter Property="TextBlock.Foreground" Value="White"/>
+        </Style>
+
+        <!-- Кнопка профиля в верхней панели -->
+        <Style Selector="Button.profile-btn">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="BorderBrush" Value="#D7CCC8"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="CornerRadius" Value="22"/>
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="Padding" Value="6,4,12,4"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+        </Style>
+
+        <Style Selector="Button.profile-btn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#EFE7DE"/>
+            <Setter Property="BorderBrush" Value="#8D6E63"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
+        </Style>
+
+        <!-- Мини-кнопки таймера смены -->
+        <Style Selector="Button.timer-btn">
+            <Setter Property="Background" Value="#4E342E"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="10,0"/>
+        </Style>
+
+        <Style Selector="Button.timer-btn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#E65100"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="TextBlock.Foreground" Value="White"/>
+        </Style>
+
+        <!-- Вкладки страницы Клуб Аллюр (округлые светлые пилюли) -->
+        <Style Selector="Button.subtab-club">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#5D4037"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style Selector="Button.subtab-club:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#EFE7DE"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
+        </Style>
+
+        <Style Selector="Button.subtab-club.active">
+            <Setter Property="Background" Value="#E65100"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style Selector="Button.subtab-club.active:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#F57C00"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="TextBlock.Foreground" Value="White"/>
+        </Style>
+
+        <!-- Вкладки страницы Ипподром (темно-коричневые строгие с акцентом) -->
+        <Style Selector="Button.subtab-hippo">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#6D4C41"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0,0,0,3"/>
+            <Setter Property="CornerRadius" Value="6,6,0,0"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style Selector="Button.subtab-hippo:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#EFE7DE"/>
+            <Setter Property="BorderBrush" Value="#8D6E63"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
+        </Style>
+
+        <Style Selector="Button.subtab-hippo.active">
+            <Setter Property="Background" Value="#FAF6F2"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="BorderBrush" Value="#E65100"/>
+            <Setter Property="BorderThickness" Value="0,0,0,3"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <Style Selector="Button.subtab-hippo.active:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#FAF6F2"/>
+            <Setter Property="BorderBrush" Value="#E65100"/>
+            <Setter Property="Foreground" Value="#3E2723"/>
+            <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
     </Application.Styles>
 </Application>

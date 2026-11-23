@@ -1,0 +1,475 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace Avalo;
+
+// Модели под таблицы базы данных и интерфейс
+
+public class RoleItem
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string PermissionsSummary { get; set; } = string.Empty;
+}
+
+public class UserProfile
+{
+    public int Id { get; set; }
+    public int RoleId { get; set; }
+    public string RoleName { get; set; } = string.Empty;
+    public string Login { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+
+    public string Initials
+    {
+        get
+        {
+            var parts = FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2)
+                return $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}";
+            if (parts.Length == 1 && parts[0].Length >= 2)
+                return parts[0][..2].ToUpperInvariant();
+            if (parts.Length == 1 && parts[0].Length == 1)
+                return parts[0].ToUpperInvariant();
+            return "КС";
+        }
+    }
+
+    public string ShortName
+    {
+        get
+        {
+            var parts = FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3)
+                return $"{parts[0]} {parts[1][0]}.{parts[2][0]}.";
+            if (parts.Length == 2)
+                return $"{parts[0]} {parts[1][0]}.";
+            return FullName;
+        }
+    }
+}
+
+public class HorseBreed
+{
+    public int Id { get; set; }
+    public string BreedName { get; set; } = string.Empty;
+    public string Temperament { get; set; } = string.Empty;
+    public string OriginCountry { get; set; } = string.Empty;
+
+    public override string ToString() => $"{BreedName} ({OriginCountry})";
+}
+
+public class HorseItem
+{
+    public int Id { get; set; }
+    public int BreedId { get; set; }
+    public string BreedName { get; set; } = string.Empty;
+    public string Temperament { get; set; } = string.Empty;
+    public string OriginCountry { get; set; } = string.Empty;
+    public string Nickname { get; set; } = string.Empty;
+    public string PassportChipCode { get; set; } = string.Empty;
+    public int BirthYear { get; set; }
+    public string SuitColor { get; set; } = string.Empty;
+    public bool IsReadyForTraining { get; set; } = true;
+
+    public override string ToString() =>
+        IsReadyForTraining ? $"{Nickname} ({BreedName})" : $"{Nickname} [Веткарантин]";
+}
+
+public class ClubRider
+{
+    public int Id { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string SkillLevel { get; set; } = "Любитель";
+    public decimal DiscountRate { get; set; }
+    public string MembershipName { get; set; } = "Разовый визит";
+    public string RemainingSessions { get; set; } = "-";
+
+    public override string ToString() =>
+        DiscountRate > 0 ? $"{FullName} (скидка {DiscountRate:0}%)" : FullName;
+}
+
+public class RidingSessionItem
+{
+    public int Id { get; set; }
+    public int OrderId { get; set; }
+    public int HorseId { get; set; }
+    public string HorseName { get; set; } = string.Empty;
+    public DateTime SessionDateTime { get; set; }
+    public int DurationMinutes { get; set; } = 45;
+    public bool HasTrainer { get; set; }
+    public decimal ItemCost { get; set; }
+}
+
+public class RidingOrder
+{
+    public int Id { get; set; }
+    public string OrderNum { get; set; } = string.Empty;
+    public int UserId { get; set; }
+    public int ClubRiderId { get; set; }
+    public string RiderName { get; set; } = string.Empty;
+    public decimal RiderDiscount { get; set; }
+    public DateTime OrderDate { get; set; }
+    public decimal TotalPrice { get; set; }
+    public string Status { get; set; } = ClubLogic.OrderStatuses.Booked;
+    public string? CancelReason { get; set; }
+    public string ArenaZone { get; set; } = "Конкурный манеж";
+    public List<RidingSessionItem> Items { get; set; } = new();
+}
+
+public class EquipmentRentalItem
+{
+    public int Id { get; set; }
+    public string InventoryCode { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = "Седло";
+    public string Size { get; set; } = string.Empty;
+    public decimal PricePerHour { get; set; }
+    public string Status { get; set; } = "Свободно";
+    public string RentedByRider { get; set; } = "-";
+    public string OrderNum { get; set; } = "-";
+}
+
+public class StallItem
+{
+    public int Id { get; set; }
+    public string StallCode { get; set; } = string.Empty;
+    public string WingSection { get; set; } = string.Empty;
+    public string StallType { get; set; } = string.Empty;
+    public int? HorseId { get; set; }
+    public string HorseName { get; set; } = "Свободен";
+    public string BreedName { get; set; } = "-";
+    public string OwnerOrBoardingType { get; set; } = "-";
+    public string ReservedUntil { get; set; } = "-";
+    public string Status { get; set; } = "Свободен";
+}
+
+public class FeedingRationItem
+{
+    public int Id { get; set; }
+    public int HorseId { get; set; }
+    public string HorseName { get; set; } = string.Empty;
+    public string StallCode { get; set; } = string.Empty;
+    public string MorningFeed { get; set; } = string.Empty;
+    public string DayFeed { get; set; } = string.Empty;
+    public string EveningFeed { get; set; } = string.Empty;
+    public string DietNote { get; set; } = string.Empty;
+}
+
+// Расчет стоимости, переходы статусов и экспорт
+
+public static class ClubLogic
+{
+    public static class OrderStatuses
+    {
+        public const string Booked = "Забронировано";
+        public const string Saddled = "Лошадь оседлана";
+        public const string InArena = "Тренировка в манеже";
+        public const string Completed = "Завершена успешно";
+        public const string CancelledVet = "Отмена по ветпоказаниям";
+    }
+
+    public static string FormatOrderNumber(int year, int sequenceNum)
+    {
+        return $"ПР23-КСК-{year}-{sequenceNum:D5}";
+    }
+
+    public static decimal CalculateSessionCost(int durationMinutes, bool hasTrainer, decimal discountRate)
+    {
+        if (durationMinutes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(durationMinutes), "Длительность должна быть больше 0.");
+
+        decimal baseCost = (durationMinutes / 45m) * 1500m;
+        decimal trainerFee = hasTrainer ? 1000m : 0m;
+        decimal subtotal = baseCost + trainerFee;
+        decimal clampedDiscount = Math.Clamp(discountRate, 0m, 100m);
+        decimal total = subtotal * (1m - clampedDiscount / 100m);
+        return Math.Round(total, 2, MidpointRounding.AwayFromZero);
+    }
+
+    public static bool IsClosedStatus(string status) =>
+        status == OrderStatuses.Completed || status == OrderStatuses.CancelledVet;
+
+    public static string? GetNextPrimaryStatus(string currentStatus) => currentStatus switch
+    {
+        OrderStatuses.Booked => OrderStatuses.Saddled,
+        OrderStatuses.Saddled => OrderStatuses.InArena,
+        OrderStatuses.InArena => OrderStatuses.Completed,
+        _ => null
+    };
+
+    public static string? GetNextButtonLabel(string currentStatus) => currentStatus switch
+    {
+        OrderStatuses.Booked => "Оседлать",
+        OrderStatuses.Saddled => "В манеж",
+        OrderStatuses.InArena => "Завершить",
+        _ => null
+    };
+
+    public static bool CanTransition(string fromStatus, string toStatus)
+    {
+        if (IsClosedStatus(fromStatus))
+            return false;
+
+        if (toStatus == OrderStatuses.CancelledVet)
+            return true;
+
+        return (fromStatus, toStatus) switch
+        {
+            (OrderStatuses.Booked, OrderStatuses.Saddled) => true,
+            (OrderStatuses.Saddled, OrderStatuses.InArena) => true,
+            (OrderStatuses.InArena, OrderStatuses.Completed) => true,
+            _ => false
+        };
+    }
+
+    public static void TransitionOrderStatus(RidingOrder order, string nextStatus, bool horseReadyForTraining, string? cancelReason = null)
+    {
+        if (IsClosedStatus(order.Status))
+            throw new InvalidOperationException($"Нельзя изменить закрытый документ ({order.Status}).");
+
+        if (nextStatus != OrderStatuses.CancelledVet && !horseReadyForTraining)
+            throw new InvalidOperationException("Назначение лошади заблокировано: отсутствует ветеринарный допуск.");
+
+        if (!CanTransition(order.Status, nextStatus))
+            throw new InvalidOperationException($"Недопустимый переход статуса: '{order.Status}' -> '{nextStatus}'.");
+
+        order.Status = nextStatus;
+        if (nextStatus == OrderStatuses.CancelledVet)
+            order.CancelReason = string.IsNullOrWhiteSpace(cancelReason)
+                ? "Снята по ветеринарным показаниям"
+                : cancelReason.Trim();
+    }
+
+    public static string ComputeDocumentSha256(string orderNum, DateTime orderDate, string counterparty, decimal totalPrice, int itemCount)
+    {
+        string raw = $"{orderNum}{orderDate:dd.MM.yyyy HH:mm}{counterparty}{totalPrice.ToString("F2", CultureInfo.InvariantCulture)}{itemCount}";
+        byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    public static string BuildRouteSheetText(RidingOrder order)
+    {
+        string dateText = order.OrderDate.ToString("dd.MM.yyyy HH:mm");
+        string sha = ComputeDocumentSha256(order.OrderNum, order.OrderDate, order.RiderName, order.TotalPrice, order.Items.Count);
+        string sourceConcat = $"[{order.OrderNum}]+[{dateText}]+[{order.RiderName}]+[{order.TotalPrice:F2}]+[{order.Items.Count}]";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("------------------------------------------------------------");
+        sb.AppendLine("КСК И ИППОДРОМ «АЛЛЮР» (ШИФР: КСК, ГРУППА ПР-23)");
+        sb.AppendLine("МАРШРУТНЫЙ ЛИСТ ТРЕНИРОВКИ И АКТ ПРОВЕРКИ СНАРЯЖЕНИЯ");
+        sb.AppendLine("------------------------------------------------------------");
+        sb.AppendLine($"Документ N:           {order.OrderNum}");
+        sb.AppendLine($"Дата оформления:      {dateText}");
+        sb.AppendLine($"Всадник (контрагент): {order.RiderName} (скидка {order.RiderDiscount:0}%)");
+        sb.AppendLine($"Зона / Манеж:         {order.ArenaZone}");
+        sb.AppendLine($"Текущий статус:       {order.Status}");
+        if (!string.IsNullOrWhiteSpace(order.CancelReason))
+            sb.AppendLine($"Причина отмены:       {order.CancelReason}");
+        sb.AppendLine("------------------------------------------------------------");
+        sb.AppendLine("Позиции тренировки:");
+        foreach (var item in order.Items)
+        {
+            string trainerStr = item.HasTrainer ? "с тренером (+1000 руб.)" : "без тренера";
+            sb.AppendLine($" - Лошадь: {item.HorseName} | {item.SessionDateTime:dd.MM.yyyy HH:mm} | {item.DurationMinutes} мин | {trainerStr} | {item.ItemCost:N2} руб.");
+        }
+        sb.AppendLine($"ИТОГО К ОПЛАТЕ:       {order.TotalPrice:N2} руб. (позиций: {order.Items.Count})");
+        sb.AppendLine("------------------------------------------------------------");
+        sb.AppendLine("АКТ ПРОВЕРКИ СНАРЯЖЕНИЯ:");
+        sb.AppendLine(" [x] Седло и подпруга проверены, приструги зафиксированы");
+        sb.AppendLine(" [x] Уздечка и повод исправны, трензель подобран по размеру");
+        sb.AppendLine(" [x] Защитный шлем надет и отрегулирован перед выходом в манеж");
+        sb.AppendLine();
+        sb.AppendLine("Инструктор по верховой езде: _________________ / Подпись /");
+        sb.AppendLine("------------------------------------------------------------");
+        sb.AppendLine($"Контроль целостности: {sourceConcat}");
+        sb.AppendLine($"SHA-256 подпись:      {sha}");
+        sb.AppendLine("------------------------------------------------------------");
+        return sb.ToString();
+    }
+
+    public static string FormatMoney(decimal amount) =>
+        $"{amount.ToString("#,##0", CultureInfo.GetCultureInfo("ru-RU"))} руб.";
+}
+
+// Стартовые данные в памяти (позже заменятся на запросы в MySQL)
+
+public class MockClubData
+{
+    public UserProfile CurrentUser { get; set; } = new()
+    {
+        Id = 1,
+        RoleId = 2,
+        RoleName = "Администратор манежа",
+        Login = "admin",
+        FullName = "Иванова Анна Сергеевна"
+    };
+
+    public List<RoleItem> Roles { get; } = new()
+    {
+        new RoleItem
+        {
+            Id = 1,
+            Name = "Главный берейтор-зоотехник",
+            PermissionsSummary = "Рационы кормления, ветеринарные допуски, бронирование денников"
+        },
+        new RoleItem
+        {
+            Id = 2,
+            Name = "Администратор манежа",
+            PermissionsSummary = "Запись всадников на занятия, аренда снаряжения (седла, шлемы), клубные абонементы"
+        }
+    };
+
+    public List<HorseBreed> Breeds { get; } = new()
+    {
+        new HorseBreed { Id = 1, BreedName = "Ганноверская", Temperament = "Уравновешенный, конкурный", OriginCountry = "Германия" },
+        new HorseBreed { Id = 2, BreedName = "Ахалтекинская", Temperament = "Энергичный, резвый", OriginCountry = "Туркменистан" },
+        new HorseBreed { Id = 3, BreedName = "Тракененская", Temperament = "Спортивный, выносливый", OriginCountry = "Германия" },
+        new HorseBreed { Id = 4, BreedName = "Орловский рысак", Temperament = "Послушный, учебный", OriginCountry = "Россия" }
+    };
+
+    public List<HorseItem> Horses { get; }
+    public List<ClubRider> Riders { get; }
+    public List<RidingOrder> Orders { get; }
+    public List<EquipmentRentalItem> Equipment { get; }
+    public List<StallItem> Stalls { get; }
+    public List<FeedingRationItem> Rations { get; }
+
+    public int NextOrderSequence { get; set; } = 6;
+    public int NextRiderId { get; set; } = 6;
+    public int NextHorseId { get; set; } = 7;
+    public int NextEquipmentId { get; set; } = 9;
+
+    public MockClubData()
+    {
+        Horses = new List<HorseItem>
+        {
+            new() { Id = 1, BreedId = 1, BreedName = "Ганноверская", Temperament = "Уравновешенный", OriginCountry = "Германия", Nickname = "Буцефал", PassportChipCode = "CHIP-RU-2018-104", BirthYear = 2018, SuitColor = "Вороная", IsReadyForTraining = true },
+            new() { Id = 2, BreedId = 3, BreedName = "Тракененская", Temperament = "Спортивный", OriginCountry = "Германия", Nickname = "Гроза", PassportChipCode = "CHIP-RU-2019-219", BirthYear = 2019, SuitColor = "Гнедая", IsReadyForTraining = true },
+            new() { Id = 3, BreedId = 2, BreedName = "Ахалтекинская", Temperament = "Энергичный", OriginCountry = "Туркменистан", Nickname = "Альтаир", PassportChipCode = "CHIP-RU-2020-315", BirthYear = 2020, SuitColor = "Соловая", IsReadyForTraining = true },
+            new() { Id = 4, BreedId = 4, BreedName = "Орловский рысак", Temperament = "Послушный", OriginCountry = "Россия", Nickname = "Зевс", PassportChipCode = "CHIP-RU-2017-088", BirthYear = 2017, SuitColor = "Серая в яблоках", IsReadyForTraining = false },
+            new() { Id = 5, BreedId = 1, BreedName = "Ганноверская", Temperament = "Уравновешенный", OriginCountry = "Германия", Nickname = "Карамель", PassportChipCode = "CHIP-RU-2021-402", BirthYear = 2021, SuitColor = "Рыжая", IsReadyForTraining = true },
+            new() { Id = 6, BreedId = 3, BreedName = "Тракененская", Temperament = "Спортивный", OriginCountry = "Германия", Nickname = "Барон", PassportChipCode = "CHIP-RU-2019-511", BirthYear = 2019, SuitColor = "Тёмно-гнедая", IsReadyForTraining = true }
+        };
+
+        Riders = new List<ClubRider>
+        {
+            new() { Id = 1, FullName = "Соколов Дмитрий Андреевич", Phone = "+7 (903) 412-55-10", SkillLevel = "Спортсмен (конкур)", DiscountRate = 15m, MembershipName = "Конкур PRO (12 зан.)", RemainingSessions = "7 зан." },
+            new() { Id = 2, FullName = "Волкова Мария Игоревна", Phone = "+7 (916) 784-19-22", SkillLevel = "Опытный всадник", DiscountRate = 10m, MembershipName = "Базовый (8 зан.)", RemainingSessions = "5 зан." },
+            new() { Id = 3, FullName = "Кузнецов Артём Олегович", Phone = "+7 (925) 330-81-04", SkillLevel = "Начинающий", DiscountRate = 0m, MembershipName = "Разовый визит", RemainingSessions = "-" },
+            new() { Id = 4, FullName = "Лебедева Екатерина Павловна", Phone = "+7 (905) 619-40-77", SkillLevel = "Опытный всадник", DiscountRate = 20m, MembershipName = "Клубный безлимит", RemainingSessions = "Безлимит" },
+            new() { Id = 5, FullName = "Морозов Илья Викторович", Phone = "+7 (985) 207-93-18", SkillLevel = "Любитель", DiscountRate = 5m, MembershipName = "Базовый (4 зан.)", RemainingSessions = "2 зан." }
+        };
+
+        var today = DateTime.Today;
+        Orders = new List<RidingOrder>
+        {
+            CreateSeedOrder(1, 2026, 1, Riders[0], Horses[0], today.AddHours(10), 90, true, ClubLogic.OrderStatuses.InArena, "Конкурный манеж"),
+            CreateSeedOrder(2, 2026, 2, Riders[1], Horses[1], today.AddHours(11).AddMinutes(30), 45, true, ClubLogic.OrderStatuses.Saddled, "Крытый манеж 1"),
+            CreateSeedOrder(3, 2026, 3, Riders[2], Horses[4], today.AddHours(14), 45, true, ClubLogic.OrderStatuses.Booked, "Учебный манеж"),
+            CreateSeedOrder(4, 2026, 4, Riders[3], Horses[5], today.AddHours(9), 90, false, ClubLogic.OrderStatuses.Completed, "Открытый плац"),
+            CreateSeedOrder(5, 2026, 5, Riders[4], Horses[3], today.AddHours(16), 45, false, ClubLogic.OrderStatuses.CancelledVet, "Крытый манеж 1", "Ветеринарный карантин копытного сустава")
+        };
+
+        Equipment = new List<EquipmentRentalItem>
+        {
+            new() { Id = 1, InventoryCode = "EQ-001", Name = "Седло конкурное Prestige X-Paris", Category = "Седло", Size = "17.5\"", PricePerHour = 500m, Status = "В аренде", RentedByRider = "Соколов Д.А.", OrderNum = "ПР23-КСК-2026-00001" },
+            new() { Id = 2, InventoryCode = "EQ-002", Name = "Шлем защитный Uvex Perfexxion II", Category = "Шлем", Size = "M (55-58)", PricePerHour = 250m, Status = "В аренде", RentedByRider = "Волкова М.И.", OrderNum = "ПР23-КСК-2026-00002" },
+            new() { Id = 3, InventoryCode = "EQ-003", Name = "Шлем тренировочный Fouganza C500", Category = "Шлем", Size = "L (58-61)", PricePerHour = 200m, Status = "Свободно", RentedByRider = "-", OrderNum = "-" },
+            new() { Id = 4, InventoryCode = "EQ-004", Name = "Седло универсальное Kieffer Wien", Category = "Седло", Size = "17.0\"", PricePerHour = 400m, Status = "Свободно", RentedByRider = "-", OrderNum = "-" },
+            new() { Id = 5, InventoryCode = "EQ-005", Name = "Защитный жилет для конкура Hit-Air", Category = "Защита", Size = "M", PricePerHour = 350m, Status = "В аренде", RentedByRider = "Соколов Д.А.", OrderNum = "ПР23-КСК-2026-00001" },
+            new() { Id = 6, InventoryCode = "EQ-006", Name = "Краги кожаные Tattini Close", Category = "Амуниция", Size = "M / High", PricePerHour = 180m, Status = "Свободно", RentedByRider = "-", OrderNum = "-" },
+            new() { Id = 7, InventoryCode = "EQ-007", Name = "Шлем детский Casco Nori", Category = "Шлем", Size = "S (52-55)", PricePerHour = 200m, Status = "На проверке", RentedByRider = "-", OrderNum = "-" },
+            new() { Id = 8, InventoryCode = "EQ-008", Name = "Седло конкурное Stubben Zaria", Category = "Седло", Size = "18.0\"", PricePerHour = 450m, Status = "Свободно", RentedByRider = "-", OrderNum = "-" }
+        };
+
+        Stalls = new List<StallItem>
+        {
+            new() { Id = 1, StallCode = "Д-01", WingSection = "Крыло А", StallType = "Спортивный", HorseId = 1, HorseName = "Буцефал", BreedName = "Ганноверская", OwnerOrBoardingType = "КСК «Аллюр»", ReservedUntil = "Постоянный", Status = "Занят" },
+            new() { Id = 2, StallCode = "Д-02", WingSection = "Крыло А", StallType = "Спортивный", HorseId = 2, HorseName = "Гроза", BreedName = "Тракененская", OwnerOrBoardingType = "КСК «Аллюр»", ReservedUntil = "Постоянный", Status = "Занят" },
+            new() { Id = 3, StallCode = "Д-03", WingSection = "Крыло А", StallType = "Спортивный", HorseId = 3, HorseName = "Альтаир", BreedName = "Ахалтекинская", OwnerOrBoardingType = "Частный постой (Орлов Д.В.)", ReservedUntil = "до 30.12.2026", Status = "Занят" },
+            new() { Id = 4, StallCode = "Д-04", WingSection = "Ветблок", StallType = "Изолятор", HorseId = 4, HorseName = "Зевс", BreedName = "Орловский рысак", OwnerOrBoardingType = "КСК «Аллюр»", ReservedUntil = "до 28.11.2026", Status = "Занят" },
+            new() { Id = 5, StallCode = "Д-05", WingSection = "Крыло Б", StallType = "Стандарт", HorseId = 5, HorseName = "Карамель", BreedName = "Ганноверская", OwnerOrBoardingType = "КСК «Аллюр»", ReservedUntil = "Постоянный", Status = "Занят" },
+            new() { Id = 6, StallCode = "Д-06", WingSection = "Крыло Б", StallType = "Стандарт", HorseId = 6, HorseName = "Барон", BreedName = "Тракененская", OwnerOrBoardingType = "Частный постой (Ким А.Р.)", ReservedUntil = "до 15.01.2027", Status = "Занят" },
+            new() { Id = 7, StallCode = "Д-07", WingSection = "Крыло Б", StallType = "Стандарт", HorseId = null, HorseName = "Бронь: Вектор", BreedName = "Будённовская", OwnerOrBoardingType = "Частный постой (Титов С.)", ReservedUntil = "с 25.11.2026", Status = "Забронирован" },
+            new() { Id = 8, StallCode = "Д-08", WingSection = "Крыло Б", StallType = "Стандарт", HorseId = null, HorseName = "Свободен", BreedName = "-", OwnerOrBoardingType = "-", ReservedUntil = "-", Status = "Свободен" },
+            new() { Id = 9, StallCode = "Д-09", WingSection = "Крыло А", StallType = "Спортивный", HorseId = null, HorseName = "Свободен", BreedName = "-", OwnerOrBoardingType = "-", ReservedUntil = "-", Status = "Свободен" }
+        };
+
+        Rations = new List<FeedingRationItem>
+        {
+            new() { Id = 1, HorseId = 1, HorseName = "Буцефал", StallCode = "Д-01", MorningFeed = "Овёс 2.5 кг, Сено луговое 4 кг", DayFeed = "Мэш 1.5 кг, Сено 4 кг, Морковь 1 кг", EveningFeed = "Овёс 2.0 кг, Сено 5 кг, Электролиты", DietNote = "Спортивный (конкур)" },
+            new() { Id = 2, HorseId = 2, HorseName = "Гроза", StallCode = "Д-02", MorningFeed = "Овёс 2.0 кг, Сено 4 кг", DayFeed = "Мюсли без овса 1.5 кг, Сено 4 кг", EveningFeed = "Овёс 2.0 кг, Сено 4.5 кг, Биотин", DietNote = "Конкурный стандарт" },
+            new() { Id = 3, HorseId = 3, HorseName = "Альтаир", StallCode = "Д-03", MorningFeed = "Мюсли спорт 2.0 кг, Люцерна 3 кг", DayFeed = "Ячмень плющёный 1.0 кг, Сено 4 кг", EveningFeed = "Мюсли 2.0 кг, Сено 4.5 кг, Лён", DietNote = "Повышенный белок" },
+            new() { Id = 4, HorseId = 4, HorseName = "Зевс", StallCode = "Д-04", MorningFeed = "ВТМ 1.5 кг, Сено запаренное 4 кг", DayFeed = "Мэш тёплый 1.5 кг, Сено 4 кг", EveningFeed = "Отруби 1.0 кг, Сено 5 кг, Хондропротектор", DietNote = "Щадящий (веткарантин)" },
+            new() { Id = 5, HorseId = 5, HorseName = "Карамель", StallCode = "Д-05", MorningFeed = "Овёс 1.5 кг, Сено 3.5 кг", DayFeed = "Мюсли лайт 1.0 кг, Яблоки 0.5 кг", EveningFeed = "Овёс 1.5 кг, Сено 4 кг", DietNote = "Учебный рацион" },
+            new() { Id = 6, HorseId = 6, HorseName = "Барон", StallCode = "Д-06", MorningFeed = "Овёс 2.0 кг, Сено 4 кг", DayFeed = "Каша овсяная 1.5 кг, Сено 4 кг", EveningFeed = "Овёс 2.0 кг, Сено 5 кг, Соль-лизунец", DietNote = "Стандартный тренировочный" }
+        };
+    }
+
+    private static RidingOrder CreateSeedOrder(
+        int id,
+        int year,
+        int seq,
+        ClubRider rider,
+        HorseItem horse,
+        DateTime sessionTime,
+        int durationMinutes,
+        bool hasTrainer,
+        string status,
+        string arenaZone,
+        string? cancelReason = null)
+    {
+        decimal cost = ClubLogic.CalculateSessionCost(durationMinutes, hasTrainer, rider.DiscountRate);
+        var order = new RidingOrder
+        {
+            Id = id,
+            OrderNum = ClubLogic.FormatOrderNumber(year, seq),
+            UserId = 1,
+            ClubRiderId = rider.Id,
+            RiderName = rider.FullName,
+            RiderDiscount = rider.DiscountRate,
+            OrderDate = sessionTime,
+            TotalPrice = cost,
+            Status = status,
+            CancelReason = cancelReason,
+            ArenaZone = arenaZone,
+            Items = new List<RidingSessionItem>
+            {
+                new()
+                {
+                    Id = id,
+                    OrderId = id,
+                    HorseId = horse.Id,
+                    HorseName = horse.Nickname,
+                    SessionDateTime = sessionTime,
+                    DurationMinutes = durationMinutes,
+                    HasTrainer = hasTrainer,
+                    ItemCost = cost
+                }
+            }
+        };
+        return order;
+    }
+
+    public int GetHorseDailyMinutes(int horseId, DateTime date)
+    {
+        return Orders
+            .Where(o => o.Status != ClubLogic.OrderStatuses.CancelledVet)
+            .SelectMany(o => o.Items)
+            .Where(i => i.HorseId == horseId && i.SessionDateTime.Date == date.Date)
+            .Sum(i => i.DurationMinutes);
+    }
+
+    public string GetHorseDailyHoursText(int horseId, DateTime date)
+    {
+        double hours = GetHorseDailyMinutes(horseId, date) / 60.0;
+        return $"{hours:0.0} / 3.0 ч";
+    }
+}
