@@ -161,6 +161,34 @@ public class FeedingRationItem
     public string DietNote { get; set; } = string.Empty;
 }
 
+public class ClientRequestItem
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string RequesterName { get; set; } = string.Empty;
+    public string RequestType { get; set; } = "Тренировка и манеж";
+    public string TargetName { get; set; } = string.Empty;
+    public int? HorseId { get; set; }
+    public string ArenaZone { get; set; } = "Конкурный манеж";
+    public int DurationMinutes { get; set; } = 45;
+    public bool HasTrainer { get; set; } = true;
+    public DateTime RequestedDateTime { get; set; } = DateTime.Today.AddHours(16);
+    public decimal EstimatedCost { get; set; }
+    public string Comment { get; set; } = string.Empty;
+    public string Status { get; set; } = "На рассмотрении";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
+public class ManagedUserItem
+{
+    public int Id { get; set; }
+    public int RoleId { get; set; }
+    public string RoleName { get; set; } = string.Empty;
+    public string Login { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string OfflinePasswordHash { get; set; } = string.Empty;
+}
+
 // Расчет стоимости, переходы статусов и экспорт
 
 public static class ClubLogic
@@ -322,7 +350,13 @@ public class MockClubData
         {
             Id = 2,
             Name = "Администратор манежа",
-            PermissionsSummary = "Запись всадников на занятия, аренда снаряжения (седла, шлемы), клубные абонементы"
+            PermissionsSummary = "Запись всадников на занятия, аренда снаряжения (седла, шлемы), одобрение заявок и роли"
+        },
+        new RoleItem
+        {
+            Id = 3,
+            Name = "Клиент",
+            PermissionsSummary = "Отправка заявок на тренировку, коня, аренду манежа, снаряжения и постоя"
         }
     };
 
@@ -340,11 +374,14 @@ public class MockClubData
     public List<EquipmentRentalItem> Equipment { get; }
     public List<StallItem> Stalls { get; }
     public List<FeedingRationItem> Rations { get; }
+    public List<ClientRequestItem> Requests { get; }
+    public List<ManagedUserItem> Users { get; }
 
     public int NextOrderSequence { get; set; } = 6;
     public int NextRiderId { get; set; } = 6;
     public int NextHorseId { get; set; } = 7;
     public int NextEquipmentId { get; set; } = 9;
+    public int NextRequestId { get; set; } = 3;
 
     public MockClubData()
     {
@@ -410,6 +447,51 @@ public class MockClubData
             new() { Id = 4, HorseId = 4, HorseName = "Зевс", StallCode = "Д-04", MorningFeed = "ВТМ 1.5 кг, Сено запаренное 4 кг", DayFeed = "Мэш тёплый 1.5 кг, Сено 4 кг", EveningFeed = "Отруби 1.0 кг, Сено 5 кг, Хондропротектор", DietNote = "Щадящий (веткарантин)" },
             new() { Id = 5, HorseId = 5, HorseName = "Карамель", StallCode = "Д-05", MorningFeed = "Овёс 1.5 кг, Сено 3.5 кг", DayFeed = "Мюсли лайт 1.0 кг, Яблоки 0.5 кг", EveningFeed = "Овёс 1.5 кг, Сено 4 кг", DietNote = "Учебный рацион" },
             new() { Id = 6, HorseId = 6, HorseName = "Барон", StallCode = "Д-06", MorningFeed = "Овёс 2.0 кг, Сено 4 кг", DayFeed = "Каша овсяная 1.5 кг, Сено 4 кг", EveningFeed = "Овёс 2.0 кг, Сено 5 кг, Соль-лизунец", DietNote = "Стандартный тренировочный" }
+        };
+
+        Users = new List<ManagedUserItem>
+        {
+            new() { Id = 1, RoleId = 1, RoleName = "Главный берейтор-зоотехник", Login = "bereitor", FullName = "Орлов Алексей Викторович", OfflinePasswordHash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" },
+            new() { Id = 2, RoleId = 2, RoleName = "Администратор манежа", Login = "admin", FullName = "Иванова Анна Сергеевна", OfflinePasswordHash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" },
+            new() { Id = 3, RoleId = 3, RoleName = "Клиент", Login = "client", FullName = "Петров Максим Игоревич", OfflinePasswordHash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" }
+        };
+
+        Requests = new List<ClientRequestItem>
+        {
+            new()
+            {
+                Id = 1,
+                UserId = 3,
+                RequesterName = "Петров Максим Игоревич",
+                RequestType = "Тренировка и манеж",
+                TargetName = "Буцефал",
+                HorseId = 1,
+                ArenaZone = "Конкурный манеж",
+                DurationMinutes = 45,
+                HasTrainer = true,
+                RequestedDateTime = today.AddHours(16),
+                EstimatedCost = 2500m,
+                Comment = "Первое занятие по конкуру с тренером",
+                Status = "На рассмотрении",
+                CreatedAt = today.AddHours(9)
+            },
+            new()
+            {
+                Id = 2,
+                UserId = 3,
+                RequesterName = "Петров Максим Игоревич",
+                RequestType = "Аренда снаряжения",
+                TargetName = "EQ-003 Шлем тренировочный Fouganza C500",
+                HorseId = null,
+                ArenaZone = "Склад амуниции",
+                DurationMinutes = 45,
+                HasTrainer = false,
+                RequestedDateTime = today.AddHours(16),
+                EstimatedCost = 200m,
+                Comment = "Размер L на время занятия",
+                Status = "На рассмотрении",
+                CreatedAt = today.AddHours(9).AddMinutes(10)
+            }
         };
     }
 

@@ -35,13 +35,24 @@ public partial class MainWindow
 
         int readyCount = _data.Horses.Count(h => h.IsReadyForTraining);
         int quarantineCount = _data.Horses.Count(h => !h.IsReadyForTraining);
-        int occupiedStalls = _data.Stalls.Count(s => s.Status != "Свободен");
+        int freeStalls = _data.Stalls.Count(s => s.Status == "Свободен");
+        int occupiedStalls = _data.Stalls.Count - freeStalls;
 
         var headerGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
             ColumnSpacing = 16
         };
+
+        string hippoTitle = IsClient
+            ? "Ипподром - Лошади клуба и свободные денники"
+            : "Ипподром - Конюшня, денники и ветконтроль";
+
+        string hippoSubtitle = IsClient
+            ? "Просматривайте допущенных лошадей для записи на тренировку или отправьте заявку на постой"
+            : IsZootech
+                ? "Управление ветеринарными допусками, распределение денников и рационы кормления"
+                : "Справочник лошадей, свободных денников и рационов кормления (редактирует зоотехник)";
 
         var titleStack = new StackPanel
         {
@@ -51,14 +62,14 @@ public partial class MainWindow
             {
                 new TextBlock
                 {
-                    Text = "Ипподром - Конюшня, денники и ветконтроль",
+                    Text = hippoTitle,
                     FontSize = 20,
                     FontWeight = FontWeight.Bold,
                     Foreground = Brushes.White
                 },
                 new TextBlock
                 {
-                    Text = "Учет постоя спортивных лошадей в денниках, ветеринарные допуски и рационы кормления",
+                    Text = hippoSubtitle,
                     FontSize = 12,
                     Foreground = _borderSand
                 }
@@ -73,7 +84,9 @@ public partial class MainWindow
             Children =
             {
                 CreateKpiCard("Допущены к работе", $"{readyCount} / {_data.Horses.Count}", true),
-                CreateKpiCard("Занято денников", $"{occupiedStalls} / {_data.Stalls.Count}", true),
+                CreateKpiCard(IsClient ? "Свободно денников" : "Занято денников",
+                    IsClient ? $"{freeStalls} / {_data.Stalls.Count}" : $"{occupiedStalls} / {_data.Stalls.Count}",
+                    true),
                 CreateKpiCard("На веткарантине", quarantineCount.ToString(), true)
             }
         };
@@ -95,21 +108,31 @@ public partial class MainWindow
         Grid.SetRow(heroBanner, 0);
         layout.Children.Add(heroBanner);
 
+        var tabButtons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 4
+        };
+
+        if (IsClient)
+        {
+            if (_hippoTabIndex > 1) _hippoTabIndex = 0;
+            tabButtons.Children.Add(CreateHippoSubTabButton("Лошади клуба", 0));
+            tabButtons.Children.Add(CreateHippoSubTabButton("Денники и постой", 1));
+        }
+        else
+        {
+            if (_hippoTabIndex > 2) _hippoTabIndex = 0;
+            tabButtons.Children.Add(CreateHippoSubTabButton("Лошади и ветдопуск", 0));
+            tabButtons.Children.Add(CreateHippoSubTabButton("Денники и постой", 1));
+            tabButtons.Children.Add(CreateHippoSubTabButton("Рационы кормления", 2));
+        }
+
         var tabBar = new Border
         {
             BorderBrush = _textMutedBrown,
             BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 4,
-                Children =
-                {
-                    CreateHippoSubTabButton("Лошади и ветдопуск", 0),
-                    CreateHippoSubTabButton("Денники и постой", 1),
-                    CreateHippoSubTabButton("Рационы кормления", 2)
-                }
-            }
+            Child = tabButtons
         };
         Grid.SetRow(tabBar, 1);
         layout.Children.Add(tabBar);
@@ -123,12 +146,23 @@ public partial class MainWindow
             Padding = new Thickness(14)
         };
 
-        tableContainer.Child = _hippoTabIndex switch
+        if (IsClient)
         {
-            0 => BuildHippoHorsesTab(),
-            1 => BuildHippoStallsTab(),
-            _ => BuildHippoRationsTab()
-        };
+            tableContainer.Child = _hippoTabIndex switch
+            {
+                0 => BuildHippoHorsesTab(),
+                _ => BuildHippoStallsTab()
+            };
+        }
+        else
+        {
+            tableContainer.Child = _hippoTabIndex switch
+            {
+                0 => BuildHippoHorsesTab(),
+                1 => BuildHippoStallsTab(),
+                _ => BuildHippoRationsTab()
+            };
+        }
 
         Grid.SetRow(tableContainer, 2);
         layout.Children.Add(tableContainer);
@@ -165,7 +199,9 @@ public partial class MainWindow
 
         var toolbar = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            ColumnDefinitions = IsZootech
+                ? new ColumnDefinitions("*,Auto,Auto")
+                : new ColumnDefinitions("*,Auto"),
             ColumnSpacing = 10
         };
 
@@ -184,20 +220,24 @@ public partial class MainWindow
         };
         filterCombo.Classes.Add("compact");
 
-        var btnAddHorse = new Button { Content = "+ Добавить лошадь" };
-        btnAddHorse.Classes.Add("compact");
-
         Grid.SetColumn(searchBox, 0);
         Grid.SetColumn(filterCombo, 1);
-        Grid.SetColumn(btnAddHorse, 2);
         toolbar.Children.Add(searchBox);
         toolbar.Children.Add(filterCombo);
-        toolbar.Children.Add(btnAddHorse);
+
+        if (IsZootech)
+        {
+            var btnAddHorse = new Button { Content = "+ Добавить лошадь" };
+            btnAddHorse.Classes.Add("compact");
+            btnAddHorse.Click += (_, _) => OpenAddHorseModal();
+            Grid.SetColumn(btnAddHorse, 2);
+            toolbar.Children.Add(btnAddHorse);
+        }
 
         Grid.SetRow(toolbar, 0);
         grid.Children.Add(toolbar);
 
-        const string cols = "1.15*,1.4*,145,130,130,155";
+        const string cols = "1.15*,1.4*,145,130,130,175";
         var header = CreateTableHeader(cols, new[]
         {
             ("Кличка / Масть", 0),
@@ -205,7 +245,7 @@ public partial class MainWindow
             ("Чип / Паспорт", 2),
             ("Нагрузка сегодня", 3),
             ("Ветдопуск", 4),
-            ("Управление", 5)
+            (IsClient ? "Запись" : "Управление", 5)
         }, darkStyle: true);
 
         Grid.SetRow(header, 1);
@@ -354,40 +394,75 @@ public partial class MainWindow
                     ? CreateBadge("Допущена", "#E8F5E9", "#2E7D32", "#A5D6A7")
                     : CreateBadge("Веткарантин", "#FFEBEE", "#C62828", "#EF9A9A");
 
-                var btnToggleVet = new Button
+                Control actionControl;
+                if (IsZootech)
                 {
-                    Content = horse.IsReadyForTraining ? "Снять допуск" : "Выдать допуск"
-                };
-                btnToggleVet.Classes.Add(horse.IsReadyForTraining ? "table-danger" : "table-success");
-                btnToggleVet.Click += (_, _) =>
-                {
-                    bool newState = !horse.IsReadyForTraining;
-                    if (!Database.UpdateHorseVetStatus(horse.Id, newState, out string dbErr))
+                    var btnToggleVet = new Button
                     {
-                        ShowToast($"Ошибка БД: {dbErr}");
-                        return;
-                    }
+                        Content = horse.IsReadyForTraining ? "Снять допуск" : "Выдать допуск"
+                    };
+                    btnToggleVet.Classes.Add(horse.IsReadyForTraining ? "table-danger" : "table-success");
+                    btnToggleVet.Click += (_, _) =>
+                    {
+                        bool newState = !horse.IsReadyForTraining;
+                        if (!Database.UpdateHorseVetStatus(horse.Id, newState, out string dbErr))
+                        {
+                            ShowToast($"Ошибка БД: {dbErr}");
+                            return;
+                        }
 
-                    horse.IsReadyForTraining = newState;
-                    ShowToast(horse.IsReadyForTraining
-                        ? $"{horse.Nickname}: допущена к тренировкам"
-                        : $"{horse.Nickname}: отправлена на веткарантин (запись в манеж закрыта)");
-                    ShowHippodromePage();
-                };
+                        horse.IsReadyForTraining = newState;
+                        ShowToast(horse.IsReadyForTraining
+                            ? $"{horse.Nickname}: допущена к тренировкам"
+                            : $"{horse.Nickname}: отправлена на веткарантин (запись в манеж закрыта)");
+                        ShowHippodromePage();
+                    };
+                    actionControl = btnToggleVet;
+                }
+                else if (IsClient)
+                {
+                    if (horse.IsReadyForTraining)
+                    {
+                        var btnReqTrain = new Button { Content = "Запросить занятие" };
+                        btnReqTrain.Classes.Add("table-btn");
+                        btnReqTrain.Click += (_, _) => OpenNewRequestModal(horse);
+                        actionControl = btnReqTrain;
+                    }
+                    else
+                    {
+                        actionControl = new TextBlock
+                        {
+                            Text = "На отдыхе",
+                            FontSize = 11,
+                            Foreground = _textMutedBrown,
+                            VerticalAlignment = VerticalAlignment.Center
+                        };
+                    }
+                }
+                else
+                {
+                    actionControl = new TextBlock
+                    {
+                        Text = "Только просмотр",
+                        FontSize = 11,
+                        Foreground = _textMutedBrown,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                }
 
                 Grid.SetColumn(colName, 0);
                 Grid.SetColumn(colBreed, 1);
                 Grid.SetColumn(colChip, 2);
                 Grid.SetColumn(colLoad, 3);
                 Grid.SetColumn(vetBadge, 4);
-                Grid.SetColumn(btnToggleVet, 5);
+                Grid.SetColumn(actionControl, 5);
 
                 rowGrid.Children.Add(colName);
                 rowGrid.Children.Add(colBreed);
                 rowGrid.Children.Add(colChip);
                 rowGrid.Children.Add(colLoad);
                 rowGrid.Children.Add(vetBadge);
-                rowGrid.Children.Add(btnToggleVet);
+                rowGrid.Children.Add(actionControl);
 
                 rowsHost.Children.Add(new Border
                 {
@@ -410,8 +485,6 @@ public partial class MainWindow
             _hippoVetFilter = filterCombo.SelectedItem?.ToString() ?? "Все";
             PopulateRows();
         };
-
-        btnAddHorse.Click += (_, _) => OpenAddHorseModal();
 
         PopulateRows();
         return grid;
@@ -579,7 +652,7 @@ public partial class MainWindow
         Grid.SetRow(toolbar, 0);
         grid.Children.Add(toolbar);
 
-        const string cols = "80,1.2*,1.2*,1.35*,115,115,135";
+        const string cols = "80,1.2*,1.2*,1.35*,115,115,155";
         var header = CreateTableHeader(cols, new[]
         {
             ("Денник", 0),
@@ -709,29 +782,60 @@ public partial class MainWindow
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
-                if (stall.Status == "Свободен")
+                if (IsClient)
                 {
-                    var btnBook = new Button { Content = "Бронировать" };
-                    btnBook.Classes.Add("table-btn");
-                    btnBook.Click += (_, _) => OpenBookStallModal(stall);
-                    actionPanel.Children.Add(btnBook);
+                    if (stall.Status == "Свободен")
+                    {
+                        var btnReqStall = new Button { Content = "Заявка на постой" };
+                        btnReqStall.Classes.Add("table-btn");
+                        btnReqStall.Click += (_, _) => OpenStallRequestModal(stall);
+                        actionPanel.Children.Add(btnReqStall);
+                    }
+                    else
+                    {
+                        actionPanel.Children.Add(new TextBlock
+                        {
+                            Text = "Занято",
+                            FontSize = 11,
+                            Foreground = _textMutedBrown
+                        });
+                    }
+                }
+                else if (IsZootech)
+                {
+                    if (stall.Status == "Свободен")
+                    {
+                        var btnBook = new Button { Content = "Бронировать" };
+                        btnBook.Classes.Add("table-btn");
+                        btnBook.Click += (_, _) => OpenBookStallModal(stall);
+                        actionPanel.Children.Add(btnBook);
+                    }
+                    else
+                    {
+                        var btnFree = new Button { Content = "Освободить" };
+                        btnFree.Classes.Add("table-secondary");
+                        btnFree.Click += (_, _) =>
+                        {
+                            stall.Status = "Свободен";
+                            stall.HorseId = null;
+                            stall.HorseName = "Свободен";
+                            stall.BreedName = "-";
+                            stall.OwnerOrBoardingType = "-";
+                            stall.ReservedUntil = "-";
+                            ShowToast($"Денник {stall.StallCode} освобожден");
+                            ShowHippodromePage();
+                        };
+                        actionPanel.Children.Add(btnFree);
+                    }
                 }
                 else
                 {
-                    var btnFree = new Button { Content = "Освободить" };
-                    btnFree.Classes.Add("table-secondary");
-                    btnFree.Click += (_, _) =>
+                    actionPanel.Children.Add(new TextBlock
                     {
-                        stall.Status = "Свободен";
-                        stall.HorseId = null;
-                        stall.HorseName = "Свободен";
-                        stall.BreedName = "-";
-                        stall.OwnerOrBoardingType = "-";
-                        stall.ReservedUntil = "-";
-                        ShowToast($"Денник {stall.StallCode} освобожден");
-                        ShowHippodromePage();
-                    };
-                    actionPanel.Children.Add(btnFree);
+                        Text = "Просмотр",
+                        FontSize = 11,
+                        Foreground = _textMutedBrown
+                    });
                 }
 
                 Grid.SetColumn(cCode, 0);
@@ -774,6 +878,78 @@ public partial class MainWindow
 
         PopulateRows();
         return grid;
+    }
+
+    private void OpenStallRequestModal(StallItem stall)
+    {
+        var box = new StackPanel { Spacing = 12 };
+        box.Children.Add(CreateModalHeader(
+            $"Заявка на постой: денник {stall.StallCode}",
+            $"{stall.WingSection}, тип: {stall.StallType}"));
+
+        var txtHorse = new TextBox { PlaceholderText = "Кличка вашей лошади или порода" };
+        txtHorse.Classes.Add("compact");
+
+        var txtComment = new TextBox { PlaceholderText = "Предполагаемый срок заезда и пожелания" };
+        txtComment.Classes.Add("compact");
+
+        var btnSend = new Button { Content = "Отправить заявку админу" };
+        btnSend.Classes.Add("compact");
+        var btnCancel = new Button { Content = "Отмена" };
+        btnCancel.Classes.Add("secondary");
+        btnCancel.Click += (_, _) => CloseModal();
+
+        btnSend.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(txtHorse.Text))
+            {
+                ShowPopupError(txtHorse, "Укажите кличку лошади");
+                return;
+            }
+
+            var req = new ClientRequestItem
+            {
+                Id = _data.NextRequestId++,
+                UserId = _data.CurrentUser.Id,
+                RequesterName = _data.CurrentUser.FullName,
+                RequestType = "Бронь денника",
+                TargetName = $"{stall.StallCode} ({stall.WingSection})",
+                HorseId = null,
+                ArenaZone = stall.StallType,
+                DurationMinutes = 0,
+                HasTrainer = false,
+                RequestedDateTime = DateTime.Today.AddDays(1),
+                EstimatedCost = 0m,
+                Comment = string.IsNullOrWhiteSpace(txtComment.Text)
+                    ? txtHorse.Text.Trim()
+                    : $"{txtHorse.Text.Trim()} — {txtComment.Text.Trim()}",
+                Status = "На рассмотрении",
+                CreatedAt = DateTime.Now
+            };
+
+            if (!Database.AddClientRequest(req, out string err))
+            {
+                ShowToast($"Ошибка БД: {err}");
+                return;
+            }
+
+            _data.Requests.Insert(0, req);
+            CloseModal();
+            ShowToast($"Заявка на денник {stall.StallCode} отправлена администратору");
+            ShowHippodromePage();
+        };
+
+        box.Children.Add(CreateFormField("Лошадь для постоя", txtHorse));
+        box.Children.Add(CreateFormField("Комментарий / срок", txtComment));
+        box.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Children = { btnCancel, btnSend }
+        });
+
+        ShowModal(box);
     }
 
     private void OpenBookStallModal(StallItem stall)
@@ -867,7 +1043,7 @@ public partial class MainWindow
         Grid.SetRow(searchBox, 0);
         grid.Children.Add(searchBox);
 
-        const string cols = "1.05*,1.25*,1.25*,1.25*,1.1*,110";
+        const string cols = "1.05*,1.25*,1.25*,1.25*,1.1*,120";
         var header = CreateTableHeader(cols, new[]
         {
             ("Лошадь / Денник", 0),
@@ -943,23 +1119,38 @@ public partial class MainWindow
                     ration.DietNote.Contains("вет", StringComparison.OrdinalIgnoreCase) ? "#FFEBEE" : "#EFEBE9",
                     ration.DietNote.Contains("вет", StringComparison.OrdinalIgnoreCase) ? "#C62828" : "#4E342E");
 
-                var btnEdit = new Button { Content = "Изменить" };
-                btnEdit.Classes.Add("table-secondary");
-                btnEdit.Click += (_, _) => OpenEditRationModal(ration);
+                Control actionControl;
+                if (IsZootech)
+                {
+                    var btnEdit = new Button { Content = "Изменить" };
+                    btnEdit.Classes.Add("table-secondary");
+                    btnEdit.Click += (_, _) => OpenEditRationModal(ration);
+                    actionControl = btnEdit;
+                }
+                else
+                {
+                    actionControl = new TextBlock
+                    {
+                        Text = "Просмотр",
+                        FontSize = 11,
+                        Foreground = _textMutedBrown,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                }
 
                 Grid.SetColumn(cHorse, 0);
                 Grid.SetColumn(cMorning, 1);
                 Grid.SetColumn(cDay, 2);
                 Grid.SetColumn(cEvening, 3);
                 Grid.SetColumn(cNote, 4);
-                Grid.SetColumn(btnEdit, 5);
+                Grid.SetColumn(actionControl, 5);
 
                 rowGrid.Children.Add(cHorse);
                 rowGrid.Children.Add(cMorning);
                 rowGrid.Children.Add(cDay);
                 rowGrid.Children.Add(cEvening);
                 rowGrid.Children.Add(cNote);
-                rowGrid.Children.Add(btnEdit);
+                rowGrid.Children.Add(actionControl);
 
                 rowsHost.Children.Add(new Border
                 {

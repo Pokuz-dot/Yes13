@@ -20,6 +20,44 @@ public static class Database
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
+    private static void EnsureSchema(MySqlConnection conn)
+    {
+        const string roleSql = @"
+            INSERT IGNORE INTO roles (id, name) VALUES
+            (1, 'Главный берейтор-зоотехник'),
+            (2, 'Администратор манежа'),
+            (3, 'Клиент');";
+
+        using (var roleCmd = new MySqlCommand(roleSql, conn))
+        {
+            roleCmd.ExecuteNonQuery();
+        }
+
+        const string reqTableSql = @"
+            CREATE TABLE IF NOT EXISTS client_requests (
+              id int(11) NOT NULL AUTO_INCREMENT,
+              user_id int(11) NOT NULL,
+              requester_name varchar(150) NOT NULL,
+              request_type varchar(60) NOT NULL,
+              target_name varchar(150) NOT NULL,
+              horse_id int(11) DEFAULT NULL,
+              arena_zone varchar(100) NOT NULL DEFAULT 'Конкурный манеж',
+              duration_minutes int(11) NOT NULL DEFAULT 45,
+              has_trainer tinyint(1) NOT NULL DEFAULT 1,
+              requested_datetime datetime NOT NULL,
+              estimated_cost decimal(10,2) NOT NULL DEFAULT 0.00,
+              comment varchar(255) DEFAULT NULL,
+              status varchar(40) NOT NULL DEFAULT 'На рассмотрении',
+              created_at datetime NOT NULL DEFAULT current_timestamp(),
+              PRIMARY KEY (id),
+              KEY fk_requests_user (user_id),
+              CONSTRAINT fk_requests_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
+
+        using var reqCmd = new MySqlCommand(reqTableSql, conn);
+        reqCmd.ExecuteNonQuery();
+    }
+
     public static UserProfile? Login(string login, string password, out bool dbAvailable, out string error)
     {
         dbAvailable = false;
@@ -32,6 +70,7 @@ public static class Database
             dbAvailable = true;
             IsConnected = true;
             LastError = string.Empty;
+            EnsureSchema(conn);
 
             const string sql = @"
                 SELECT u.id, u.role_id, r.name AS role_name, u.login, u.password_hash, u.full_name
@@ -66,7 +105,7 @@ public static class Database
             {
                 Id = Convert.ToInt32(reader["id"]),
                 RoleId = Convert.ToInt32(reader["role_id"]),
-                RoleName = reader["role_name"]?.ToString() ?? "Администратор манежа",
+                RoleName = reader["role_name"]?.ToString() ?? "Клиент",
                 Login = reader["login"]?.ToString() ?? login,
                 FullName = reader["full_name"]?.ToString() ?? login
             };
@@ -80,10 +119,11 @@ public static class Database
         }
     }
 
-    public static UserProfile? Register(string fullName, string login, string password, int roleId, out bool dbAvailable, out string error)
+    public static UserProfile? RegisterClient(string fullName, string login, string password, out bool dbAvailable, out string error)
     {
         dbAvailable = false;
         error = string.Empty;
+        const int clientRoleId = 3;
 
         try
         {
@@ -92,6 +132,7 @@ public static class Database
             dbAvailable = true;
             IsConnected = true;
             LastError = string.Empty;
+            EnsureSchema(conn);
 
             using (var checkCmd = new MySqlCommand("SELECT COUNT(*) FROM users WHERE login = @login;", conn))
             {
@@ -111,7 +152,7 @@ public static class Database
             long newId;
             using (var insertCmd = new MySqlCommand(insertSql, conn))
             {
-                insertCmd.Parameters.AddWithValue("@roleId", roleId);
+                insertCmd.Parameters.AddWithValue("@roleId", clientRoleId);
                 insertCmd.Parameters.AddWithValue("@login", login);
                 insertCmd.Parameters.AddWithValue("@hash", HashPassword(password));
                 insertCmd.Parameters.AddWithValue("@fullName", fullName);
@@ -119,20 +160,11 @@ public static class Database
                 newId = insertCmd.LastInsertedId;
             }
 
-            string roleName = roleId == 1 ? "Главный берейтор-зоотехник" : "Администратор манежа";
-            using (var roleCmd = new MySqlCommand("SELECT name FROM roles WHERE id = @id LIMIT 1;", conn))
-            {
-                roleCmd.Parameters.AddWithValue("@id", roleId);
-                var result = roleCmd.ExecuteScalar();
-                if (result != null && result != DBNull.Value)
-                    roleName = result.ToString() ?? roleName;
-            }
-
             return new UserProfile
             {
                 Id = (int)newId,
-                RoleId = roleId,
-                RoleName = roleName,
+                RoleId = clientRoleId,
+                RoleName = "Клиент",
                 Login = login,
                 FullName = fullName
             };
@@ -156,6 +188,7 @@ public static class Database
             conn.Open();
             IsConnected = true;
             LastError = string.Empty;
+            EnsureSchema(conn);
 
             // 1. Роли
             var roles = new List<RoleItem>();
@@ -170,9 +203,12 @@ public static class Database
                     {
                         Id = id,
                         Name = name,
-                        PermissionsSummary = id == 1
-                            ? "Рационы кормления, ветеринарные допуски, бронирование денников"
-                            : "Запись всадников на занятия, аренда снаряжения (седла, шлемы), клубные абонементы"
+                        PermissionsSummary = id switch
+                        {
+                            1 => "Рационы кормления, ветеринарные допуски, бронирование денников",
+                            2 => "Запись всадников на занятия, аренда снаряжения, одобрение заявок и выдача ролей",
+                            _ => "Отправка заявок на тренировку, коня, аренду манежа, снаряжения и постоя"
+                        }
                     });
                 }
             }
@@ -182,7 +218,33 @@ public static class Database
                 data.Roles.AddRange(roles);
             }
 
-            // 2. Породы лошадей
+            // 2. Пользователи (для выдачи ролей админом)
+            var users = new List<ManagedUserItem>();
+            const string usersSql = @"
+                SELECT u.id, u.role_id, r.name AS role_name, u.login, u.full_name
+                FROM users u
+                JOIN roles r ON r.id = u.role_id
+                ORDER BY u.id;";
+
+            using (var cmd = new MySqlCommand(usersSql, conn))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    users.Add(new ManagedUserItem
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        RoleId = Convert.ToInt32(reader["role_id"]),
+                        RoleName = reader["role_name"]?.ToString() ?? string.Empty,
+                        Login = reader["login"]?.ToString() ?? string.Empty,
+                        FullName = reader["full_name"]?.ToString() ?? string.Empty
+                    });
+                }
+            }
+            data.Users.Clear();
+            data.Users.AddRange(users);
+
+            // 3. Породы лошадей
             var breeds = new List<HorseBreed>();
             using (var cmd = new MySqlCommand("SELECT id, breed_name, temperament, origin_country FROM horse_breeds ORDER BY id;", conn))
             using (var reader = cmd.ExecuteReader())
@@ -201,7 +263,7 @@ public static class Database
             data.Breeds.Clear();
             data.Breeds.AddRange(breeds);
 
-            // 3. Лошади
+            // 4. Лошади
             var horses = new List<HorseItem>();
             const string horsesSql = @"
                 SELECT h.id, h.breed_id, hb.breed_name, hb.temperament, hb.origin_country,
@@ -234,7 +296,7 @@ public static class Database
             data.Horses.AddRange(horses);
             data.NextHorseId = horses.Count > 0 ? horses.Max(h => h.Id) + 1 : 1;
 
-            // 4. Всадники клуба
+            // 5. Всадники клуба
             var riders = new List<ClubRider>();
             using (var cmd = new MySqlCommand("SELECT id, full_name, phone, skill_level, discount_rate FROM club_riders ORDER BY id;", conn))
             using (var reader = cmd.ExecuteReader())
@@ -258,7 +320,7 @@ public static class Database
             data.Riders.AddRange(riders);
             data.NextRiderId = riders.Count > 0 ? riders.Max(r => r.Id) + 1 : 1;
 
-            // 5. Заказы и позиции тренировок
+            // 6. Заказы и позиции тренировок
             var orders = new List<RidingOrder>();
             const string ordersSql = @"
                 SELECT o.id, o.order_num, o.user_id, o.club_rider_id,
@@ -333,7 +395,43 @@ public static class Database
             }
             data.NextOrderSequence = maxSeq + 1;
 
-            // Синхронизируем локальные таблицы рационов и денников с лошадьми из БД
+            // 7. Заявки пользователей
+            var requests = new List<ClientRequestItem>();
+            const string reqSql = @"
+                SELECT id, user_id, requester_name, request_type, target_name, horse_id,
+                       arena_zone, duration_minutes, has_trainer, requested_datetime,
+                       estimated_cost, comment, status, created_at
+                FROM client_requests
+                ORDER BY id DESC;";
+
+            using (var cmd = new MySqlCommand(reqSql, conn))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    requests.Add(new ClientRequestItem
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        UserId = Convert.ToInt32(reader["user_id"]),
+                        RequesterName = reader["requester_name"]?.ToString() ?? string.Empty,
+                        RequestType = reader["request_type"]?.ToString() ?? "Тренировка и манеж",
+                        TargetName = reader["target_name"]?.ToString() ?? string.Empty,
+                        HorseId = reader["horse_id"] == DBNull.Value ? null : Convert.ToInt32(reader["horse_id"]),
+                        ArenaZone = reader["arena_zone"]?.ToString() ?? "Конкурный манеж",
+                        DurationMinutes = Convert.ToInt32(reader["duration_minutes"]),
+                        HasTrainer = Convert.ToBoolean(reader["has_trainer"]),
+                        RequestedDateTime = Convert.ToDateTime(reader["requested_datetime"]),
+                        EstimatedCost = Convert.ToDecimal(reader["estimated_cost"]),
+                        Comment = reader["comment"] == DBNull.Value ? string.Empty : reader["comment"]?.ToString() ?? string.Empty,
+                        Status = reader["status"]?.ToString() ?? "На рассмотрении",
+                        CreatedAt = Convert.ToDateTime(reader["created_at"])
+                    });
+                }
+            }
+            data.Requests.Clear();
+            data.Requests.AddRange(requests);
+            data.NextRequestId = requests.Count > 0 ? requests.Max(r => r.Id) + 1 : 1;
+
             SyncAuxiliaryTables(data);
             return true;
         }
@@ -344,6 +442,121 @@ public static class Database
             error = ex.Message;
             return false;
         }
+    }
+
+    public static bool AddClientRequest(ClientRequestItem req, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = @"
+                INSERT INTO client_requests
+                (user_id, requester_name, request_type, target_name, horse_id, arena_zone, duration_minutes, has_trainer, requested_datetime, estimated_cost, comment, status)
+                VALUES (@uid, @name, @type, @target, @hid, @arena, @dur, @trainer, @dt, @cost, @comment, @status);";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@uid", req.UserId);
+            cmd.Parameters.AddWithValue("@name", req.RequesterName);
+            cmd.Parameters.AddWithValue("@type", req.RequestType);
+            cmd.Parameters.AddWithValue("@target", req.TargetName);
+            cmd.Parameters.AddWithValue("@hid", (object?)req.HorseId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@arena", req.ArenaZone);
+            cmd.Parameters.AddWithValue("@dur", req.DurationMinutes);
+            cmd.Parameters.AddWithValue("@trainer", req.HasTrainer ? 1 : 0);
+            cmd.Parameters.AddWithValue("@dt", req.RequestedDateTime);
+            cmd.Parameters.AddWithValue("@cost", req.EstimatedCost);
+            cmd.Parameters.AddWithValue("@comment", string.IsNullOrWhiteSpace(req.Comment) ? DBNull.Value : req.Comment);
+            cmd.Parameters.AddWithValue("@status", req.Status);
+            cmd.ExecuteNonQuery();
+            req.Id = (int)cmd.LastInsertedId;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool UpdateClientRequestStatus(int requestId, string status, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = "UPDATE client_requests SET status = @status WHERE id = @id;";
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@status", status);
+            cmd.Parameters.AddWithValue("@id", requestId);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool UpdateUserRole(int userId, int newRoleId, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = "UPDATE users SET role_id = @roleId WHERE id = @id;";
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@roleId", newRoleId);
+            cmd.Parameters.AddWithValue("@id", userId);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static ClubRider EnsureRiderExists(MockClubData data, string fullName, out string error)
+    {
+        error = string.Empty;
+        var existing = data.Riders.FirstOrDefault(r =>
+            r.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+            return existing;
+
+        var newRider = new ClubRider
+        {
+            Id = data.NextRiderId++,
+            FullName = fullName,
+            Phone = "Не указан",
+            SkillLevel = "Начинающий",
+            DiscountRate = 0m,
+            MembershipName = "Разовый визит",
+            RemainingSessions = "-"
+        };
+
+        if (AddRider(newRider, out error))
+            data.Riders.Add(newRider);
+
+        return newRider;
     }
 
     public static bool AddOrder(RidingOrder order, out string error)
@@ -549,6 +762,35 @@ public static class Database
                     EveningFeed = "Овёс 2.0 кг, Сено 4.5 кг",
                     DietNote = horse.IsReadyForTraining ? "Стандартный спортивный" : "Щадящий (веткарантин)"
                 });
+            }
+        }
+
+        foreach (var req in data.Requests.Where(r => r.Status == "Одобрено"))
+        {
+            if (req.RequestType == "Аренда снаряжения")
+            {
+                var equip = data.Equipment.FirstOrDefault(e =>
+                    req.TargetName.StartsWith(e.InventoryCode, StringComparison.OrdinalIgnoreCase)
+                    || req.TargetName.Contains(e.Name, StringComparison.OrdinalIgnoreCase));
+                if (equip != null && equip.Status == "Свободно")
+                {
+                    equip.Status = "В аренде";
+                    equip.RentedByRider = req.RequesterName;
+                    equip.OrderNum = "Одобрено по заявке";
+                }
+            }
+            else if (req.RequestType == "Бронь денника")
+            {
+                var stall = data.Stalls.FirstOrDefault(s =>
+                    req.TargetName.StartsWith(s.StallCode, StringComparison.OrdinalIgnoreCase));
+                if (stall != null && stall.Status == "Свободен")
+                {
+                    stall.Status = "Забронирован";
+                    stall.OwnerOrBoardingType = req.RequesterName;
+                    stall.HorseName = string.IsNullOrWhiteSpace(req.Comment) ? "Бронь клиента" : req.Comment;
+                    stall.BreedName = "По заявке";
+                    stall.ReservedUntil = $"с {req.RequestedDateTime:dd.MM.yyyy}";
+                }
             }
         }
     }

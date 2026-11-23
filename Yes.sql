@@ -10,6 +10,7 @@ SET time_zone = "+00:00";
 CREATE DATABASE IF NOT EXISTS `Yes` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `Yes`;
 
+DROP TABLE IF EXISTS `client_requests`;
 DROP TABLE IF EXISTS `riding_session_items`;
 DROP TABLE IF EXISTS `riding_orders`;
 DROP TABLE IF EXISTS `horses`;
@@ -27,9 +28,10 @@ CREATE TABLE `roles` (
 
 INSERT INTO `roles` (`id`, `name`) VALUES
 (1, 'Главный берейтор-зоотехник'),
-(2, 'Администратор манежа');
+(2, 'Администратор манежа'),
+(3, 'Клиент');
 
--- 2. Пользователи системы (пароль для тестовых аккаунтов: 123456)
+-- 2. Пользователи системы (пароль у тестовых аккаунтов: 123456)
 CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `role_id` int(11) NOT NULL,
@@ -44,7 +46,8 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`id`, `role_id`, `login`, `password_hash`, `full_name`) VALUES
 (1, 1, 'bereitor', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Орлов Алексей Викторович'),
-(2, 2, 'admin', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Иванова Анна Сергеевна');
+(2, 2, 'admin', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Иванова Анна Сергеевна'),
+(3, 3, 'client', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Петров Максим Игоревич');
 
 -- 3. Породы лошадей
 CREATE TABLE `horse_breeds` (
@@ -93,7 +96,7 @@ CREATE TABLE `club_riders` (
 INSERT INTO `club_riders` (`id`, `full_name`, `phone`, `skill_level`, `discount_rate`) VALUES
 (1, 'Соколов Дмитрий Андреевич', '+7 (903) 412-55-10', 'Спортсмен (конкур)', 15.00),
 (2, 'Волкова Мария Игоревна', '+7 (916) 784-19-22', 'Опытный всадник', 10.00),
-(3, 'Кузнецов Артем Олегович', '+7 (925) 330-81-04', 'Начинающий', 0.00);
+(3, 'Петров Максим Игоревич', '+7 (925) 330-81-04', 'Начинающий', 0.00);
 
 -- 6. Заказы на тренировки и аренду манежа
 CREATE TABLE `riding_orders` (
@@ -138,6 +141,31 @@ INSERT INTO `riding_session_items` (`id`, `order_id`, `horse_id`, `session_datet
 (1, 1, 1, '2026-11-23 10:00:00', 90, 1, 3400.00),
 (2, 2, 2, '2026-11-23 11:30:00', 45, 1, 2250.00),
 (3, 3, 2, '2026-11-23 14:00:00', 45, 0, 1500.00);
+
+-- 8. Заявки пользователей на одобрение администратору
+CREATE TABLE `client_requests` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `requester_name` varchar(150) NOT NULL,
+  `request_type` varchar(60) NOT NULL,
+  `target_name` varchar(150) NOT NULL,
+  `horse_id` int(11) DEFAULT NULL,
+  `arena_zone` varchar(100) NOT NULL DEFAULT 'Конкурный манеж',
+  `duration_minutes` int(11) NOT NULL DEFAULT 45,
+  `has_trainer` tinyint(1) NOT NULL DEFAULT 1,
+  `requested_datetime` datetime NOT NULL,
+  `estimated_cost` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `comment` varchar(255) DEFAULT NULL,
+  `status` varchar(40) NOT NULL DEFAULT 'На рассмотрении',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `fk_requests_user` (`user_id`),
+  CONSTRAINT `fk_requests_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+INSERT INTO `client_requests` (`id`, `user_id`, `requester_name`, `request_type`, `target_name`, `horse_id`, `arena_zone`, `duration_minutes`, `has_trainer`, `requested_datetime`, `estimated_cost`, `comment`, `status`) VALUES
+(1, 3, 'Петров Максим Игоревич', 'Тренировка и манеж', 'Буцефал', 1, 'Конкурный манеж', 45, 1, '2026-11-23 16:00:00', 2500.00, 'Первое занятие по конкуру с тренером', 'На рассмотрении'),
+(2, 3, 'Петров Максим Игоревич', 'Аренда снаряжения', 'EQ-003 Шлем тренировочный Fouganza C500', NULL, 'Склад амуниции', 45, 0, '2026-11-23 16:00:00', 200.00, 'Размер L на время занятия', 'На рассмотрении');
 
 COMMIT;
 

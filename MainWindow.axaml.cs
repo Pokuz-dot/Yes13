@@ -35,6 +35,10 @@ public partial class MainWindow : Window
     private int _clubTabIndex;
     private int _hippoTabIndex;
 
+    private bool IsZootech => _data.CurrentUser.RoleId == 1;
+    private bool IsArenaAdmin => _data.CurrentUser.RoleId == 2;
+    private bool IsClient => _data.CurrentUser.RoleId == 3;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -228,9 +232,13 @@ public partial class MainWindow : Window
         ProfileNameText.Text = user.ShortName;
         ProfileRoleText.Text = user.RoleName;
 
-        bool isZootech = user.RoleId == 1;
-        ProfileAvatarBorder.Background = isZootech ? _accentOrange : _espressoDark;
-        ProfileRoleText.Foreground = isZootech ? _espressoDark : _accentOrange;
+        ProfileAvatarBorder.Background = user.RoleId switch
+        {
+            1 => _accentOrange,
+            2 => _espressoDark,
+            _ => _textMutedBrown
+        };
+        ProfileRoleText.Foreground = user.RoleId == 1 ? _espressoDark : _accentOrange;
     }
 
     private void ToggleProfilePopup()
@@ -242,7 +250,7 @@ public partial class MainWindow : Window
         }
 
         var user = _data.CurrentUser;
-        var currentRole = _data.Roles.FirstOrDefault(r => r.Id == user.RoleId) ?? _data.Roles[1];
+        var currentRole = _data.Roles.FirstOrDefault(r => r.Id == user.RoleId) ?? _data.Roles.Last();
 
         var cardContent = new StackPanel { Spacing = 10 };
 
@@ -252,7 +260,12 @@ public partial class MainWindow : Window
             Width = 42,
             Height = 42,
             CornerRadius = new CornerRadius(21),
-            Background = user.RoleId == 1 ? _accentOrange : _espressoDark,
+            Background = user.RoleId switch
+            {
+                1 => _accentOrange,
+                2 => _espressoDark,
+                _ => _textMutedBrown
+            },
             Child = new TextBlock
             {
                 Text = user.Initials,
@@ -297,7 +310,7 @@ public partial class MainWindow : Window
                 {
                     new TextBlock
                     {
-                        Text = "Зона ответственности:",
+                        Text = "Доступные возможности:",
                         FontSize = 11,
                         FontWeight = FontWeight.Bold,
                         Foreground = _textMediumBrown
@@ -333,6 +346,16 @@ public partial class MainWindow : Window
             _profilePopup?.Close();
             if (Database.LoadAll(_data, out string err))
             {
+                // Синхронизируем роль текущего пользователя из БД, если админ её изменил
+                var updated = _data.Users.FirstOrDefault(u => u.Id == _data.CurrentUser.Id);
+                if (updated != null)
+                {
+                    _data.CurrentUser.RoleId = updated.RoleId;
+                    _data.CurrentUser.RoleName = updated.RoleName;
+                    UpdateProfilePanel();
+                    ShiftTimerBox.IsVisible = !IsClient;
+                }
+
                 ShowToast("Данные обновлены из MySQL");
                 if (BtnHippodrome.Classes.Contains("active"))
                     ShowHippodromePage();
@@ -343,44 +366,6 @@ public partial class MainWindow : Window
             {
                 ShowToast($"Нет связи с БД: {err}");
             }
-        };
-
-        var btnSwitchRole = new Button
-        {
-            Content = user.RoleId == 2
-                ? "Переключить на Берейтора-зоотехника"
-                : "Переключить на Админа манежа",
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-        btnSwitchRole.Classes.Add("secondary");
-        btnSwitchRole.Click += (_, _) =>
-        {
-            _profilePopup?.Close();
-            if (_data.CurrentUser.RoleId == 2)
-            {
-                _data.CurrentUser.RoleId = 1;
-                _data.CurrentUser.RoleName = _data.Roles[0].Name;
-                if (_data.CurrentUser.Login == "admin")
-                {
-                    _data.CurrentUser.Login = "bereitor";
-                    _data.CurrentUser.FullName = "Орлов Алексей Викторович";
-                }
-                UpdateProfilePanel();
-                ShowHippodromePage();
-            }
-            else
-            {
-                _data.CurrentUser.RoleId = 2;
-                _data.CurrentUser.RoleName = _data.Roles[1].Name;
-                if (_data.CurrentUser.Login == "bereitor")
-                {
-                    _data.CurrentUser.Login = "admin";
-                    _data.CurrentUser.FullName = "Иванова Анна Сергеевна";
-                }
-                UpdateProfilePanel();
-                ShowClubPage();
-            }
-            ShowToast($"Активная роль: {_data.CurrentUser.RoleName}");
         };
 
         var btnLogout = new Button
@@ -399,7 +384,6 @@ public partial class MainWindow : Window
         };
 
         cardContent.Children.Add(btnRefreshDb);
-        cardContent.Children.Add(btnSwitchRole);
         cardContent.Children.Add(btnLogout);
 
         _profilePopup = new Popup
@@ -486,15 +470,6 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 15, 0, 0)
         };
 
-        var demoHint = new TextBlock
-        {
-            Text = "БД Yes: admin или bereitor (пароль 123456)",
-            FontSize = 11,
-            Foreground = _textMutedBrown,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 12, 0, 0)
-        };
-
         btnLogin.Click += (_, _) =>
         {
             string login = (txtLogin.Text ?? string.Empty).Trim();
@@ -524,24 +499,34 @@ public partial class MainWindow : Window
                 _data.CurrentUser = dbUser;
                 Database.LoadAll(_data, out _);
                 OnLoginSuccess();
-                ShowToast("Подключено к базе данных Yes");
+                ShowToast($"Добро пожаловать, {dbUser.ShortName}");
                 return;
             }
 
-            bool isBereitor = login.Contains("bereitor", StringComparison.OrdinalIgnoreCase)
-                || login.Contains("zoo", StringComparison.OrdinalIgnoreCase);
+            // Автономный режим при выключенной MySQL
+            var offlineMatch = _data.Users.FirstOrDefault(u =>
+                u.Login.Equals(login, StringComparison.OrdinalIgnoreCase));
+
+            if (offlineMatch == null)
+            {
+                ShowPopupError(txtLogin, "Пользователь не найден (или проверьте MySQL)");
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(offlineMatch.OfflinePasswordHash)
+                && !string.Equals(offlineMatch.OfflinePasswordHash, Database.HashPassword(password), StringComparison.OrdinalIgnoreCase))
+            {
+                ShowPopupError(txtPassword, "Неверный пароль");
+                return;
+            }
 
             _data.CurrentUser = new UserProfile
             {
-                Id = isBereitor ? 2 : 1,
-                RoleId = isBereitor ? 1 : 2,
-                RoleName = isBereitor ? _data.Roles[0].Name : _data.Roles[1].Name,
-                Login = login,
-                FullName = isBereitor
-                    ? "Орлов Алексей Викторович"
-                    : login.Equals("admin", StringComparison.OrdinalIgnoreCase)
-                        ? "Иванова Анна Сергеевна"
-                        : login
+                Id = offlineMatch.Id,
+                RoleId = offlineMatch.RoleId,
+                RoleName = offlineMatch.RoleName,
+                Login = offlineMatch.Login,
+                FullName = offlineMatch.FullName
             };
 
             OnLoginSuccess();
@@ -556,7 +541,6 @@ public partial class MainWindow : Window
         formContainer.Children.Add(txtPassword);
         formContainer.Children.Add(btnLogin);
         formContainer.Children.Add(linkRegister);
-        formContainer.Children.Add(demoHint);
 
         MainContent.Content = formContainer;
     }
@@ -589,26 +573,11 @@ public partial class MainWindow : Window
         var txtLogin = CreateTextBox("Введите логин...");
         var txtPassword = CreateTextBox("Введите пароль...", true);
 
-        var roleBox = new ComboBox
-        {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            Margin = new Thickness(0, 12, 0, 0),
-            Height = 42,
-            FontSize = 14,
-            ItemsSource = new[]
-            {
-                "Администратор манежа",
-                "Главный берейтор-зоотехник"
-            },
-            SelectedIndex = 0
-        };
-        roleBox.Classes.Add("compact");
-
         var btnRegister = new Button
         {
             Content = "Зарегистрироваться",
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Margin = new Thickness(0, 18, 0, 0)
+            Margin = new Thickness(0, 22, 0, 0)
         };
 
         var linkLogin = new TextBlock
@@ -660,10 +629,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            bool isBereitor = roleBox.SelectedIndex == 1;
-            int roleId = isBereitor ? 1 : 2;
-
-            var dbUser = Database.Register(fullName, login, password, roleId, out bool dbAvailable, out string dbError);
+            var dbUser = Database.RegisterClient(fullName, login, password, out bool dbAvailable, out string dbError);
             if (dbAvailable)
             {
                 if (dbUser == null)
@@ -675,15 +641,32 @@ public partial class MainWindow : Window
                 _data.CurrentUser = dbUser;
                 Database.LoadAll(_data, out _);
                 OnLoginSuccess();
-                ShowToast("Пользователь сохранен в базе данных Yes");
+                ShowToast("Регистрация выполнена");
                 return;
             }
 
+            if (_data.Users.Any(u => u.Login.Equals(login, StringComparison.OrdinalIgnoreCase)))
+            {
+                ShowPopupError(txtLogin, "Такой логин уже зарегистрирован");
+                return;
+            }
+
+            int offlineId = _data.Users.Count > 0 ? _data.Users.Max(u => u.Id) + 1 : 4;
+            _data.Users.Add(new ManagedUserItem
+            {
+                Id = offlineId,
+                RoleId = 3,
+                RoleName = "Клиент",
+                Login = login,
+                FullName = fullName,
+                OfflinePasswordHash = Database.HashPassword(password)
+            });
+
             _data.CurrentUser = new UserProfile
             {
-                Id = 3,
-                RoleId = roleId,
-                RoleName = isBereitor ? _data.Roles[0].Name : _data.Roles[1].Name,
+                Id = offlineId,
+                RoleId = 3,
+                RoleName = "Клиент",
                 Login = login,
                 FullName = fullName
             };
@@ -698,7 +681,6 @@ public partial class MainWindow : Window
         formContainer.Children.Add(txtFullName);
         formContainer.Children.Add(txtLogin);
         formContainer.Children.Add(txtPassword);
-        formContainer.Children.Add(roleBox);
         formContainer.Children.Add(btnRegister);
         formContainer.Children.Add(linkLogin);
 
@@ -717,9 +699,12 @@ public partial class MainWindow : Window
 
     private void OnLoginSuccess()
     {
+        _clubTabIndex = 0;
+        _hippoTabIndex = 0;
+        ShiftTimerBox.IsVisible = !IsClient;
         UpdateProfilePanel();
         TopPanel.IsVisible = true;
-        if (_data.CurrentUser.RoleId == 1)
+        if (IsZootech)
             ShowHippodromePage();
         else
             ShowClubPage();

@@ -43,7 +43,8 @@
                         </StackPanel>
 
                         <!-- Компактный таймер академического часа -->
-                        <Border Background="#EFE7DE"
+                        <Border x:Name="ShiftTimerBox"
+                                Background="#EFE7DE"
                                 BorderBrush="#D7CCC8"
                                 BorderThickness="1"
                                 CornerRadius="18"
@@ -82,12 +83,12 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Правая зона: профиль сотрудника -->
+                    <!-- Правая зона: профиль пользователя -->
                     <Button x:Name="BtnProfile"
                             Grid.Column="2"
                             Classes="profile-btn"
                             VerticalAlignment="Center"
-                            ToolTip.Tip="Профиль пользователя и смена роли">
+                            ToolTip.Tip="Профиль пользователя и настройки">
                         <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
                             <Border x:Name="ProfileAvatarBorder"
                                     Width="32" Height="32"
