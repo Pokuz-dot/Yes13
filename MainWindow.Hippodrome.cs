@@ -277,7 +277,10 @@ public partial class MainWindow
                     || h.BreedName.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || h.PassportChipCode.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || h.SuitColor.Contains(q, StringComparison.OrdinalIgnoreCase);
-            }).ToList();
+            })
+            .OrderByDescending(h => h.IsReadyForTraining)
+            .ThenBy(h => h.Id)
+            .ToList();
 
             if (filtered.Count == 0)
             {
@@ -691,7 +694,10 @@ public partial class MainWindow
                     || s.HorseName.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || s.OwnerOrBoardingType.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || s.WingSection.Contains(q, StringComparison.OrdinalIgnoreCase);
-            }).ToList();
+            })
+            .OrderBy(s => s.Status == "Свободен" ? 0 : s.Status == "Забронирован" ? 1 : 2)
+            .ThenBy(s => s.StallCode)
+            .ToList();
 
             if (filtered.Count == 0)
             {

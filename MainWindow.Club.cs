@@ -336,7 +336,10 @@ public partial class MainWindow
                     || r.RequestType.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || r.ArenaZone.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || r.Comment.Contains(q, StringComparison.OrdinalIgnoreCase);
-            }).ToList();
+            })
+            .OrderBy(r => r.Status == "На рассмотрении" ? 0 : r.Status == "Одобрено" ? 1 : 2)
+            .ThenByDescending(r => r.CreatedAt)
+            .ToList();
 
             if (filtered.Count == 0)
             {
@@ -545,7 +548,10 @@ public partial class MainWindow
                     || r.TargetName.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || r.RequestType.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || r.Comment.Contains(q, StringComparison.OrdinalIgnoreCase);
-            }).ToList();
+            })
+            .OrderBy(r => r.Status == "На рассмотрении" ? 0 : r.Status == "Одобрено" ? 1 : 2)
+            .ThenByDescending(r => r.CreatedAt)
+            .ToList();
 
             if (filtered.Count == 0)
             {
@@ -1543,7 +1549,10 @@ public partial class MainWindow
                     || o.RiderName.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || o.ArenaZone.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || horseNames.Contains(q, StringComparison.OrdinalIgnoreCase);
-            }).ToList();
+            })
+            .OrderBy(o => ClubLogic.IsClosedStatus(o.Status) ? 1 : 0)
+            .ThenByDescending(o => o.OrderDate)
+            .ToList();
 
             if (filtered.Count == 0)
             {
@@ -2040,34 +2049,327 @@ public partial class MainWindow
 
     private void OpenRouteSheetModal(RidingOrder order)
     {
-        string docText = ClubLogic.BuildRouteSheetText(order);
+        var rentedForOrder = _data.Equipment.Where(e => e.OrderNum == order.OrderNum).ToList();
+        string docText = ClubLogic.BuildRouteSheetText(order, rentedForOrder);
+        string dateText = order.OrderDate.ToString("dd.MM.yyyy HH:mm");
+        string sourceConcat = $"[{order.OrderNum}]+[{dateText}]+[{order.RiderName}]+[{order.TotalPrice:F2}]+[{order.Items.Count}]";
+        string sha = ClubLogic.ComputeDocumentSha256(order.OrderNum, order.OrderDate, order.RiderName, order.TotalPrice, order.Items.Count);
 
         var box = new StackPanel { Spacing = 12 };
         box.Children.Add(CreateModalHeader(
-            "Маршрутный лист и акт проверки",
-            $"Цифровая подпись SHA256 сформирована для {order.OrderNum}"));
+            "Маршрутный лист тренировки",
+            "Акт проверки снаряжения и контроль целостности документа"));
 
-        var previewBorder = new Border
+        // 1. Верхняя карточка документа
+        var docHeaderGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 12
+        };
+        var docTitleStack = new StackPanel
+        {
+            Spacing = 2,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = order.OrderNum,
+                    FontSize = 16,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = Brushes.White
+                },
+                new TextBlock
+                {
+                    Text = $"КСК и ипподром «Аллюр» • от {dateText}",
+                    FontSize = 11.5,
+                    Foreground = _borderSand
+                }
+            }
+        };
+        var statusBadge = CreateOrderStatusBadge(order.Status);
+        Grid.SetColumn(docTitleStack, 0);
+        Grid.SetColumn(statusBadge, 1);
+        docHeaderGrid.Children.Add(docTitleStack);
+        docHeaderGrid.Children.Add(statusBadge);
+
+        box.Children.Add(new Border
+        {
+            Background = _espressoDark,
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(14, 11),
+            Child = docHeaderGrid
+        });
+
+        // 2. Основные реквизиты (2 колонки)
+        Border MakeInfoCell(string label, string value, string? subValue = null, bool highlightOrange = false)
+        {
+            var stack = new StackPanel { Spacing = 2 };
+            stack.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 11,
+                Foreground = _textMutedBrown
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = value,
+                FontSize = 13.5,
+                FontWeight = FontWeight.Bold,
+                Foreground = highlightOrange ? _accentOrange : _textDarkBrown,
+                TextWrapping = TextWrapping.Wrap
+            });
+            if (!string.IsNullOrWhiteSpace(subValue))
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = subValue,
+                    FontSize = 11,
+                    Foreground = _textMediumBrown
+                });
+            }
+
+            return new Border
+            {
+                Background = Brush.Parse("#FAF6F2"),
+                BorderBrush = _borderSand,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(11, 8),
+                Child = stack
+            };
+        }
+
+        var infoGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*"),
+            RowDefinitions = new RowDefinitions("Auto,Auto"),
+            ColumnSpacing = 10,
+            RowSpacing = 10
+        };
+
+        var cRider = MakeInfoCell("Всадник (контрагент)", order.RiderName,
+            order.RiderDiscount > 0 ? $"Скидка по абонементу: {order.RiderDiscount:0}%" : "Базовый тариф (без скидки)");
+        var cZone = MakeInfoCell("Манеж / Зона", order.ArenaZone, $"Позиций в заказе: {order.Items.Count}");
+        var cTotal = MakeInfoCell("Итоговая стоимость", ClubLogic.FormatMoney(order.TotalPrice), "С учетом длительности и тренера", highlightOrange: true);
+        var cDate = MakeInfoCell("Время занятия", dateText, "Длительность и нагрузка по нормативу");
+
+        Grid.SetRow(cRider, 0); Grid.SetColumn(cRider, 0);
+        Grid.SetRow(cZone, 0); Grid.SetColumn(cZone, 1);
+        Grid.SetRow(cDate, 1); Grid.SetColumn(cDate, 0);
+        Grid.SetRow(cTotal, 1); Grid.SetColumn(cTotal, 1);
+
+        infoGrid.Children.Add(cRider);
+        infoGrid.Children.Add(cZone);
+        infoGrid.Children.Add(cDate);
+        infoGrid.Children.Add(cTotal);
+        box.Children.Add(infoGrid);
+
+        if (!string.IsNullOrWhiteSpace(order.CancelReason))
+        {
+            box.Children.Add(new Border
+            {
+                Background = Brush.Parse("#FFEBEE"),
+                BorderBrush = Brush.Parse("#EF9A9A"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(11, 8),
+                Child = new TextBlock
+                {
+                    Text = $"Причина отмены: {order.CancelReason}",
+                    FontSize = 12,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = Brush.Parse("#C62828"),
+                    TextWrapping = TextWrapping.Wrap
+                }
+            });
+        }
+
+        // 3. Позиции тренировки
+        var sessionsStack = new StackPanel { Spacing = 6 };
+        sessionsStack.Children.Add(new TextBlock
+        {
+            Text = "Позиции тренировки",
+            FontSize = 12,
+            FontWeight = FontWeight.Bold,
+            Foreground = _textDarkBrown
+        });
+
+        foreach (var item in order.Items)
+        {
+            var row = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                ColumnSpacing = 10
+            };
+            var left = new StackPanel
+            {
+                Spacing = 2,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = $"Лошадь: {item.HorseName}",
+                        FontSize = 13,
+                        FontWeight = FontWeight.Bold,
+                        Foreground = _textDarkBrown
+                    },
+                    new TextBlock
+                    {
+                        Text = $"{item.SessionDateTime:dd.MM.yyyy HH:mm} • {item.DurationMinutes} мин • {(item.HasTrainer ? "С тренером (+1 000 руб.)" : "Без тренера")}",
+                        FontSize = 11.5,
+                        Foreground = _textMediumBrown
+                    }
+                }
+            };
+            var right = new TextBlock
+            {
+                Text = ClubLogic.FormatMoney(item.ItemCost),
+                FontSize = 13,
+                FontWeight = FontWeight.Bold,
+                Foreground = _textDarkBrown,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(left, 0);
+            Grid.SetColumn(right, 1);
+            row.Children.Add(left);
+            row.Children.Add(right);
+
+            sessionsStack.Children.Add(new Border
+            {
+                Background = Brushes.White,
+                BorderBrush = _borderSand,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(11, 8),
+                Child = row
+            });
+        }
+
+        if (rentedForOrder.Count > 0)
+        {
+            var eqText = string.Join(", ", rentedForOrder.Select(e => $"{e.InventoryCode} ({e.Name}, {e.Size})"));
+            sessionsStack.Children.Add(new Border
+            {
+                Background = Brush.Parse("#FFF8F1"),
+                BorderBrush = Brush.Parse("#FFCC80"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(11, 8),
+                Child = new TextBlock
+                {
+                    Text = $"Выданное снаряжение: {eqText}",
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    TextWrapping = TextWrapping.Wrap
+                }
+            });
+        }
+
+        box.Children.Add(sessionsStack);
+
+        // 4. Акт проверки снаряжения и подпись инструктора
+        Border MakeCheckRow(string text)
+        {
+            var r = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Children =
+                {
+                    CreateBadge("OK", "#E8F5E9", "#2E7D32", "#A5D6A7"),
+                    new TextBlock
+                    {
+                        Text = text,
+                        FontSize = 12,
+                        Foreground = _textDarkBrown,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        TextWrapping = TextWrapping.Wrap
+                    }
+                }
+            };
+            return new Border { Child = r };
+        }
+
+        var actStack = new StackPanel
+        {
+            Spacing = 6,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "Акт проверки снаряжения",
+                    FontSize = 12,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = _textDarkBrown
+                },
+                MakeCheckRow("Седло и подпруга проверены, приструги зафиксированы"),
+                MakeCheckRow("Уздечка и повод исправны, трензель подобран по размеру"),
+                MakeCheckRow("Защитный шлем надет и отрегулирован перед выходом в манеж"),
+                new Border
+                {
+                    BorderBrush = _borderSand,
+                    BorderThickness = new Thickness(0, 1, 0, 0),
+                    Padding = new Thickness(0, 8, 0, 0),
+                    Margin = new Thickness(0, 4, 0, 0),
+                    Child = new TextBlock
+                    {
+                        Text = "Инструктор по верховой езде: _______________________  (подпись)",
+                        FontSize = 12,
+                        FontWeight = FontWeight.SemiBold,
+                        Foreground = _textMediumBrown
+                    }
+                }
+            }
+        };
+
+        box.Children.Add(new Border
         {
             Background = Brush.Parse("#FAF6F2"),
             BorderBrush = _borderSand,
             BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(12, 10),
+            Child = actStack
+        });
+
+        // 5. Контроль целостности (SHA-256)
+        box.Children.Add(new Border
+        {
+            Background = Brush.Parse("#F5EFE8"),
+            BorderBrush = _borderSand,
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12),
-            MaxHeight = 320,
-            Child = new ScrollViewer
+            Padding = new Thickness(11, 8),
+            Child = new StackPanel
             {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Content = new TextBlock
+                Spacing = 3,
+                Children =
                 {
-                    Text = docText,
-                    FontFamily = new FontFamily("Consolas, Courier New, monospace"),
-                    FontSize = 11.5,
-                    Foreground = _textDarkBrown
+                    new TextBlock
+                    {
+                        Text = "Контроль целостности документа (SHA-256)",
+                        FontSize = 11,
+                        FontWeight = FontWeight.Bold,
+                        Foreground = _textMediumBrown
+                    },
+                    new TextBlock
+                    {
+                        Text = $"Данные: {sourceConcat}",
+                        FontSize = 11,
+                        Foreground = _textDarkBrown,
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    new TextBlock
+                    {
+                        Text = sha,
+                        FontFamily = new FontFamily("Consolas, Courier New, monospace"),
+                        FontSize = 10.5,
+                        Foreground = _textMutedBrown,
+                        TextWrapping = TextWrapping.Wrap
+                    }
                 }
             }
-        };
+        });
 
         var savedLabel = new TextBlock
         {
@@ -2094,7 +2396,6 @@ public partial class MainWindow
             ShowToast($"Экспортирован файл {order.OrderNum}.txt");
         };
 
-        box.Children.Add(previewBorder);
         box.Children.Add(savedLabel);
         box.Children.Add(new StackPanel
         {
@@ -2197,7 +2498,10 @@ public partial class MainWindow
                     || e.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || e.Category.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || e.RentedByRider.Contains(q, StringComparison.OrdinalIgnoreCase);
-            }).ToList();
+            })
+            .OrderBy(e => e.Status == "Свободно" ? 0 : e.Status == "На проверке" ? 1 : 2)
+            .ThenBy(e => e.InventoryCode)
+            .ToList();
 
             if (filtered.Count == 0)
             {

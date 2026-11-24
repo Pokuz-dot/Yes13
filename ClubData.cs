@@ -282,43 +282,53 @@ public static class ClubLogic
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    public static string BuildRouteSheetText(RidingOrder order)
+    public static string BuildRouteSheetText(RidingOrder order, IEnumerable<EquipmentRentalItem>? rentedEquipment = null)
     {
         string dateText = order.OrderDate.ToString("dd.MM.yyyy HH:mm");
         string sha = ComputeDocumentSha256(order.OrderNum, order.OrderDate, order.RiderName, order.TotalPrice, order.Items.Count);
         string sourceConcat = $"[{order.OrderNum}]+[{dateText}]+[{order.RiderName}]+[{order.TotalPrice:F2}]+[{order.Items.Count}]";
 
         var sb = new StringBuilder();
-        sb.AppendLine("------------------------------------------------------------");
         sb.AppendLine("КСК И ИППОДРОМ «АЛЛЮР»");
         sb.AppendLine("МАРШРУТНЫЙ ЛИСТ ТРЕНИРОВКИ И АКТ ПРОВЕРКИ СНАРЯЖЕНИЯ");
-        sb.AppendLine("------------------------------------------------------------");
+        sb.AppendLine();
         sb.AppendLine($"Документ N:           {order.OrderNum}");
         sb.AppendLine($"Дата оформления:      {dateText}");
         sb.AppendLine($"Всадник (контрагент): {order.RiderName} (скидка {order.RiderDiscount:0}%)");
-        sb.AppendLine($"Зона / Манеж:         {order.ArenaZone}");
-        sb.AppendLine($"Текущий статус:       {order.Status}");
+        sb.AppendLine($"Манеж / Зона:         {order.ArenaZone}");
+        sb.AppendLine($"Статус заказа:        {order.Status}");
         if (!string.IsNullOrWhiteSpace(order.CancelReason))
             sb.AppendLine($"Причина отмены:       {order.CancelReason}");
-        sb.AppendLine("------------------------------------------------------------");
-        sb.AppendLine("Позиции тренировки:");
+        sb.AppendLine();
+        sb.AppendLine("ПОЗИЦИИ ТРЕНИРОВКИ:");
         foreach (var item in order.Items)
         {
             string trainerStr = item.HasTrainer ? "с тренером (+1000 руб.)" : "без тренера";
-            sb.AppendLine($" - Лошадь: {item.HorseName} | {item.SessionDateTime:dd.MM.yyyy HH:mm} | {item.DurationMinutes} мин | {trainerStr} | {item.ItemCost:N2} руб.");
+            sb.AppendLine($" * Лошадь: {item.HorseName}, {item.SessionDateTime:dd.MM.yyyy HH:mm}, {item.DurationMinutes} мин, {trainerStr} — {item.ItemCost:N2} руб.");
         }
-        sb.AppendLine($"ИТОГО К ОПЛАТЕ:       {order.TotalPrice:N2} руб. (позиций: {order.Items.Count})");
-        sb.AppendLine("------------------------------------------------------------");
-        sb.AppendLine("АКТ ПРОВЕРКИ СНАРЯЖЕНИЯ:");
-        sb.AppendLine(" [x] Седло и подпруга проверены, приструги зафиксированы");
-        sb.AppendLine(" [x] Уздечка и повод исправны, трензель подобран по размеру");
-        sb.AppendLine(" [x] Защитный шлем надет и отрегулирован перед выходом в манеж");
+
+        var eqList = rentedEquipment?.Where(e => e.OrderNum == order.OrderNum).ToList();
+        if (eqList != null && eqList.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("ВЫДАННОЕ СНАРЯЖЕНИЕ:");
+            foreach (var eq in eqList)
+                sb.AppendLine($" * {eq.InventoryCode} — {eq.Name} ({eq.Category}, размер {eq.Size})");
+        }
+
         sb.AppendLine();
-        sb.AppendLine("Инструктор по верховой езде: _________________ / Подпись /");
-        sb.AppendLine("------------------------------------------------------------");
-        sb.AppendLine($"Контроль целостности: {sourceConcat}");
-        sb.AppendLine($"SHA-256 подпись:      {sha}");
-        sb.AppendLine("------------------------------------------------------------");
+        sb.AppendLine($"ИТОГО К ОПЛАТЕ: {order.TotalPrice:N2} руб. (позиций: {order.Items.Count})");
+        sb.AppendLine();
+        sb.AppendLine("АКТ ПРОВЕРКИ СНАРЯЖЕНИЯ:");
+        sb.AppendLine(" [V] Седло и подпруга проверены, приструги зафиксированы");
+        sb.AppendLine(" [V] Уздечка и повод исправны, трензель подобран по размеру");
+        sb.AppendLine(" [V] Защитный шлем надет и отрегулирован перед выходом в манеж");
+        sb.AppendLine();
+        sb.AppendLine("Инструктор по верховой езде: _____________________ / Подпись /");
+        sb.AppendLine();
+        sb.AppendLine("КОНТРОЛЬ ЦЕЛОСТНОСТИ (SHA-256):");
+        sb.AppendLine($"Поля:    {sourceConcat}");
+        sb.AppendLine($"SHA-256: {sha}");
         return sb.ToString();
     }
 
