@@ -1,13 +1,8 @@
--- Полный дамп базы данных Yes (структура + расширенные записи КСК и ипподрома «Аллюр»)
-
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
 
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
+SET NAMES utf8mb4;
 
 CREATE DATABASE IF NOT EXISTS `Yes` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `Yes`;
@@ -25,14 +20,14 @@ DROP TABLE IF EXISTS `horse_breeds`;
 DROP TABLE IF EXISTS `users`;
 DROP TABLE IF EXISTS `roles`;
 
--- 1. Роли пользователей
+-- роли
 CREATE TABLE `roles` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 2. Пользователи системы
+-- пользователи
 CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `role_id` int(11) NOT NULL,
@@ -45,7 +40,7 @@ CREATE TABLE `users` (
   CONSTRAINT `fk_users_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 3. Породы лошадей
+-- породы лошадей
 CREATE TABLE `horse_breeds` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `breed_name` varchar(100) NOT NULL,
@@ -54,7 +49,7 @@ CREATE TABLE `horse_breeds` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 4. Лошади
+-- лошади
 CREATE TABLE `horses` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `breed_id` int(11) NOT NULL,
@@ -69,7 +64,7 @@ CREATE TABLE `horses` (
   CONSTRAINT `fk_horses_breed` FOREIGN KEY (`breed_id`) REFERENCES `horse_breeds` (`id`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 5. Всадники клуба (скидка определяется уровнем подготовки / льготой)
+-- всадники
 CREATE TABLE `club_riders` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `full_name` varchar(150) NOT NULL,
@@ -79,7 +74,7 @@ CREATE TABLE `club_riders` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 6. Заказы на тренировки и аренду манежа
+-- заказы
 CREATE TABLE `riding_orders` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `order_num` varchar(30) NOT NULL,
@@ -97,7 +92,7 @@ CREATE TABLE `riding_orders` (
   CONSTRAINT `fk_orders_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 7. Позиции тренировочных сессий
+-- позиции тренировок
 CREATE TABLE `riding_session_items` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `order_id` int(11) NOT NULL,
@@ -113,7 +108,7 @@ CREATE TABLE `riding_session_items` (
   CONSTRAINT `fk_items_order` FOREIGN KEY (`order_id`) REFERENCES `riding_orders` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 8. Снаряжение клуба
+-- снаряжение
 CREATE TABLE `equipment_items` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `inventory_code` varchar(30) NOT NULL,
@@ -128,7 +123,7 @@ CREATE TABLE `equipment_items` (
   UNIQUE KEY `inventory_code` (`inventory_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 9. Денники конюшни
+-- денники
 CREATE TABLE `stalls` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `stall_code` varchar(30) NOT NULL,
@@ -146,7 +141,7 @@ CREATE TABLE `stalls` (
   CONSTRAINT `fk_stalls_horse` FOREIGN KEY (`horse_id`) REFERENCES `horses` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 10. Рационы кормления
+-- рационы
 CREATE TABLE `feeding_rations` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `horse_id` int(11) NOT NULL,
@@ -161,7 +156,7 @@ CREATE TABLE `feeding_rations` (
   CONSTRAINT `fk_rations_horse` FOREIGN KEY (`horse_id`) REFERENCES `horses` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 11. Заявки пользователей (тренировки, снаряжение, денники, запросы скидок)
+-- заявки
 CREATE TABLE `client_requests` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) NOT NULL,
@@ -183,7 +178,7 @@ CREATE TABLE `client_requests` (
   CONSTRAINT `fk_requests_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 12. Штрафы и нарушения (разделение: зоотехник — конюшня/лошади, админ манежа — снаряжение/манеж)
+-- штрафы
 CREATE TABLE `penalties` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `rider_name` varchar(150) NOT NULL,
@@ -198,13 +193,13 @@ CREATE TABLE `penalties` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 1. Роли пользователей (3 записи)
+-- роли
 INSERT INTO `roles` (`id`, `name`) VALUES
 (1, 'Главный берейтор-зоотехник'),
 (2, 'Администратор манежа'),
 (3, 'Клиент');
 
--- 2. Пользователи системы (23 записи; пароль у всех: 123456)
+-- пользователи
 INSERT INTO `users` (`id`, `role_id`, `login`, `password_hash`, `full_name`) VALUES
 (1, 1, 'bereitor', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Орлов Алексей Викторович'),
 (2, 2, 'admin', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Иванова Анна Сергеевна'),
@@ -230,7 +225,7 @@ INSERT INTO `users` (`id`, `role_id`, `login`, `password_hash`, `full_name`) VAL
 (22, 3, 'romanova', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Романова Полина Александровна'),
 (23, 3, 'Pokuz', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Ткаченко Кирилл Александрович');
 
--- 3. Породы лошадей (8 записей)
+-- породы лошадей
 INSERT INTO `horse_breeds` (`id`, `breed_name`, `temperament`, `origin_country`) VALUES
 (1, 'Ганноверская', 'Уравновешенный, конкурный', 'Германия'),
 (2, 'Тракененская', 'Спортивный, выносливый', 'Германия'),
@@ -241,7 +236,7 @@ INSERT INTO `horse_breeds` (`id`, `breed_name`, `temperament`, `origin_country`)
 (7, 'Фризская', 'Спокойный, выездковый', 'Нидерланды'),
 (8, 'Донская', 'Выносливый, универсальный', 'Россия');
 
--- 4. Лошади (24 записи)
+-- лошади
 INSERT INTO `horses` (`id`, `breed_id`, `nickname`, `passport_chip_code`, `birth_year`, `suit_color`, `is_ready_for_training`) VALUES
 (1, 1, 'Буцефал', 'CHIP-RU-2018-104', 2018, 'Вороная', 1),
 (2, 2, 'Гроза', 'CHIP-RU-2019-219', 2019, 'Гнедая', 1),
@@ -268,7 +263,7 @@ INSERT INTO `horses` (`id`, `breed_id`, `nickname`, `passport_chip_code`, `birth
 (23, 1, 'Ветер', 'CHIP-RU-2020-617', 2020, 'Рыжая', 1),
 (24, 5, 'Искра', 'CHIP-RU-2021-618', 2021, 'Гнедая', 1);
 
--- 5. Всадники клуба (21 запись)
+-- всадники
 INSERT INTO `club_riders` (`id`, `full_name`, `phone`, `skill_level`, `discount_rate`) VALUES
 (1, 'Соколов Дмитрий Андреевич', '+7 (903) 412-55-10', 'Спортсмен (конкур)', 15.00),
 (2, 'Волкова Мария Игоревна', '+7 (916) 784-19-22', 'Опытный всадник', 10.00),
@@ -292,7 +287,7 @@ INSERT INTO `club_riders` (`id`, `full_name`, `phone`, `skill_level`, `discount_
 (20, 'Михайлова Светлана Викторовна', '+7 (903) 519-83-64', 'Опытный всадник', 10.00),
 (21, 'Ткаченко Кирилл Александрович', '+7 (900) 555-23-23', 'Начинающий', 0.00);
 
--- 6. Заказы на тренировки и аренду манежа (79 записей, включая постоянных клиентов)
+-- заказы
 INSERT INTO `riding_orders` (`id`, `order_num`, `user_id`, `club_rider_id`, `order_date`, `total_price`, `status`, `cancel_reason`) VALUES
 (1, 'ПР23-КСК-2026-00001', 2, 1, '2026-11-23 09:00:00', 4250.00, 'Тренировка в манеже', NULL),
 (2, 'ПР23-КСК-2026-00002', 2, 2, '2026-11-23 10:00:00', 2250.00, 'Лошадь оседлана', NULL),
@@ -374,7 +369,7 @@ INSERT INTO `riding_orders` (`id`, `order_num`, `user_id`, `club_rider_id`, `ord
 (78, 'ПР23-КСК-2026-00078', 5, 1, '2026-11-12 17:00:00', 2125.00, 'Завершена успешно', NULL),
 (79, 'ПР23-КСК-2026-00079', 2, 5, '2026-10-27 14:00:00', 4000.00, 'Завершена успешно', NULL);
 
--- 7. Позиции тренировочных сессий (79 записей)
+-- позиции тренировок
 INSERT INTO `riding_session_items` (`id`, `order_id`, `horse_id`, `session_datetime`, `duration_minutes`, `has_trainer`, `item_cost`) VALUES
 (1, 1, 1, '2026-11-23 09:00:00', 90, 1, 4250.00),
 (2, 2, 2, '2026-11-23 10:00:00', 45, 1, 2250.00),
@@ -456,7 +451,7 @@ INSERT INTO `riding_session_items` (`id`, `order_id`, `horse_id`, `session_datet
 (78, 78, 20, '2026-11-12 17:00:00', 45, 1, 2125.00),
 (79, 79, 21, '2026-10-27 14:00:00', 90, 1, 4000.00);
 
--- 8. Снаряжение клуба (26 записей)
+-- снаряжение
 INSERT INTO `equipment_items` (`id`, `inventory_code`, `name`, `category`, `size`, `price_per_hour`, `status`, `rented_by_rider`, `order_num`) VALUES
 (1, 'EQ-001', 'Седло конкурное Prestige X-Paris', 'Седло', '17.5"', 500.00, 'В аренде', 'Соколов Дмитрий Андреевич', 'ПР23-КСК-2026-00001'),
 (2, 'EQ-002', 'Шлем защитный Uvex Perfexxion II', 'Шлем', 'M (55-58)', 250.00, 'В аренде', 'Волкова Мария Игоревна', 'ПР23-КСК-2026-00002'),
@@ -485,7 +480,7 @@ INSERT INTO `equipment_items` (`id`, `inventory_code`, `name`, `category`, `size
 (25, 'EQ-025', 'Уздечка выездковая Kieffer Ergonomic', 'Амуниция', 'Cob', 230.00, 'Свободно', '-', '-'),
 (26, 'EQ-026', 'Жилет защитный USG Eco-Flexi', 'Защита', 'M', 320.00, 'В аренде', 'Тарасов Егор Евгеньевич', 'ПР23-КСК-2026-00024');
 
--- 9. Денники конюшни (24 записи)
+-- денники
 INSERT INTO `stalls` (`id`, `stall_code`, `wing_section`, `stall_type`, `horse_id`, `horse_name`, `breed_name`, `owner_or_boarding_type`, `reserved_until`, `status`) VALUES
 (1, 'Д-01', 'Крыло А', 'Спортивный', 1, 'Буцефал', 'Ганноверская', 'КСК «Аллюр»', 'Постоянный', 'Занят'),
 (2, 'Д-02', 'Крыло А', 'Спортивный', 2, 'Гроза', 'Тракененская', 'КСК «Аллюр»', 'Постоянный', 'Занят'),
@@ -512,7 +507,7 @@ INSERT INTO `stalls` (`id`, `stall_code`, `wing_section`, `stall_type`, `horse_i
 (23, 'Д-23', 'Крыло А', 'Спортивный', 23, 'Ветер', 'Ганноверская', 'КСК «Аллюр»', 'Постоянный', 'Занят'),
 (24, 'Д-24', 'Крыло Б', 'Стандарт', NULL, 'Свободен', '-', '-', '-', 'Свободен');
 
--- 10. Рационы кормления (24 записи)
+-- рационы
 INSERT INTO `feeding_rations` (`id`, `horse_id`, `horse_name`, `stall_code`, `morning_feed`, `day_feed`, `evening_feed`, `diet_note`) VALUES
 (1, 1, 'Буцефал', 'Д-01', 'Овёс 2.5 кг, Сено луговое 4 кг', 'Мэш 1.5 кг, Сено 4 кг, Морковь 1 кг', 'Овёс 2.0 кг, Сено 5 кг, Электролиты', 'Спортивный (конкур)'),
 (2, 2, 'Гроза', 'Д-02', 'Овёс 2.5 кг, Сено луговое 4 кг', 'Мэш 1.5 кг, Сено 4 кг, Морковь 1 кг', 'Овёс 2.0 кг, Сено 5 кг, Электролиты', 'Спортивный (конкур)'),
@@ -539,7 +534,7 @@ INSERT INTO `feeding_rations` (`id`, `horse_id`, `horse_name`, `stall_code`, `mo
 (23, 23, 'Ветер', 'Д-23', 'Овёс 2.5 кг, Сено луговое 4 кг', 'Мэш 1.5 кг, Сено 4 кг, Морковь 1 кг', 'Овёс 2.0 кг, Сено 5 кг, Электролиты', 'Спортивный (конкур)'),
 (24, 24, 'Искра', 'Левада / Временный', 'Овёс 2.0 кг, Сено 4 кг', 'Мюсли лайт 1.5 кг, Морковь 0.5 кг', 'Овёс 1.5 кг, Сено 4.5 кг', 'Учебный рацион');
 
--- 11. Заявки пользователей (32 записи)
+-- заявки
 INSERT INTO `client_requests` (`id`, `user_id`, `requester_name`, `request_type`, `target_name`, `horse_id`, `arena_zone`, `duration_minutes`, `has_trainer`, `requested_datetime`, `estimated_cost`, `comment`, `equipment_code`, `status`) VALUES
 (1, 3, 'Петров Максим Игоревич', 'Тренировка и манеж', 'Буцефал', 1, 'Конкурный манеж', 45, 1, '2026-11-23 16:00:00', 2500.00, 'Первое занятие по конкуру с тренером', 'AUTO', 'На рассмотрении'),
 (2, 3, 'Петров Максим Игоревич', 'Аренда снаряжения', 'EQ-003 Шлем тренировочный Fouganza C500', NULL, 'Склад амуниции', 45, 0, '2026-11-23 16:00:00', 200.00, 'Размер L на время занятия', 'EQ-003', 'На рассмотрении'),
@@ -574,7 +569,7 @@ INSERT INTO `client_requests` (`id`, `user_id`, `requester_name`, `request_type`
 (31, 15, 'Попова Анастасия Игоревна', 'Тренировка и манеж', 'Ночь', 9, 'Крытый манеж 1', 45, 1, '2026-11-12 15:30:00', 2250.00, 'Выездка на фризской кобыле', '', 'Одобрено'),
 (32, 23, 'Ткаченко Кирилл Александрович', 'Аренда снаряжения', 'EQ-024 Краги кожаные Sergio Grasso', NULL, 'Склад амуниции', 45, 0, '2026-11-24 18:00:00', 190.00, 'На следующую тренировку', 'EQ-024', 'На рассмотрении');
 
--- 12. Штрафы и нарушения (14 записей)
+-- штрафы
 INSERT INTO `penalties` (`id`, `rider_name`, `issued_by_name`, `issuer_role`, `category`, `reason`, `target_object`, `amount`, `status`, `created_at`) VALUES
 (1, 'Петров Максим Игоревич', 'Иванова Анна Сергеевна', 'Администратор манежа', 'Задержка / переработка времени', 'Превышение забронированного времени тренировки в манеже на 20 минут', 'ПР23-КСК-2026-00003 (Альтаир)', 750.00, 'Не оплачен', '2026-11-23 11:45:00'),
 (2, 'Волкова Мария Игоревна', 'Иванова Анна Сергеевна', 'Администратор манежа', 'Порча снаряжения', 'Повреждение ремешка застёжки на защитном шлеме', 'EQ-002 Шлем защитный Uvex Perfexxion II', 1200.00, 'Не оплачен', '2026-11-23 10:50:00'),
@@ -592,7 +587,3 @@ INSERT INTO `penalties` (`id`, `rider_name`, `issued_by_name`, `issuer_role`, `c
 (14, 'Ткаченко Кирилл Александрович', 'Смирнов Денис Павлович', 'Администратор манежа', 'Порча снаряжения', 'Утерян запасной фиксатор стремени после занятия', 'EQ-023 Шлем конкурный GPA Speed Air', 650.00, 'Оплачен', '2026-11-17 18:45:00');
 
 COMMIT;
-
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

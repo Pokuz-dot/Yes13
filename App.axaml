@@ -6,23 +6,21 @@
     <Application.Styles>
         <FluentTheme />
 
-        <!-- Общий фон приложения (мягкий песочно-бежевый) -->
+        <!-- базовые стили -->
         <Style Selector="Window">
             <Setter Property="Background" Value="#EAE0D5"/>
         </Style>
 
-        <!-- Прозрачный фон текста для надежного срабатывания наведения по всей области -->
         <Style Selector="TextBlock">
             <Setter Property="Background" Value="Transparent"/>
         </Style>
 
-        <!-- Аккуратный перенос длинного текста во всплывающих подсказках -->
         <Style Selector="ToolTip">
             <Setter Property="MaxWidth" Value="420"/>
             <Setter Property="TextBlock.TextWrapping" Value="Wrap"/>
         </Style>
 
-        <!-- Поля ввода (белые с коричневой рамкой) -->
+        <!-- поля ввода -->
         <Style Selector="TextBox">
             <Setter Property="Background" Value="White"/>
             <Setter Property="Foreground" Value="#3E2723"/>
@@ -41,7 +39,7 @@
             <Setter Property="Padding" Value="10,4"/>
         </Style>
 
-        <!-- Выпадающие списки -->
+        <!-- выпадающие списки -->
         <Style Selector="ComboBox.compact">
             <Setter Property="Background" Value="White"/>
             <Setter Property="Foreground" Value="#3E2723"/>
@@ -53,7 +51,7 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
-        <!-- Основные кнопки (оранжевые) -->
+        <!-- кнопки -->
         <Style Selector="Button">
             <Setter Property="Background" Value="#E65100"/>
             <Setter Property="Foreground" Value="White"/>
@@ -73,7 +71,6 @@
             <Setter Property="TextBlock.Foreground" Value="White"/>
         </Style>
 
-        <!-- Компактная основная кнопка -->
         <Style Selector="Button.compact">
             <Setter Property="Height" Value="36"/>
             <Setter Property="FontSize" Value="13"/>
@@ -81,7 +78,6 @@
             <Setter Property="Padding" Value="14,0"/>
         </Style>
 
-        <!-- Вторичная кнопка -->
         <Style Selector="Button.secondary">
             <Setter Property="Background" Value="#FAF6F2"/>
             <Setter Property="Foreground" Value="#3E2723"/>
@@ -99,7 +95,7 @@
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
-        <!-- Кнопки внутри таблиц -->
+        <!-- кнопки в таблицах -->
         <Style Selector="Button.table-btn">
             <Setter Property="Height" Value="28"/>
             <Setter Property="FontSize" Value="12"/>
@@ -162,7 +158,7 @@
             <Setter Property="TextBlock.Foreground" Value="#1B5E20"/>
         </Style>
 
-        <!-- Стили для переключателя в верхней панели -->
+        <!-- переключатель страниц -->
         <Style Selector="Border.toggle-container">
             <Setter Property="Background" Value="#4E342E"/>
             <Setter Property="CornerRadius" Value="25"/>
@@ -200,7 +196,7 @@
             <Setter Property="TextBlock.Foreground" Value="White"/>
         </Style>
 
-        <!-- Кнопка профиля в верхней панели -->
+        <!-- профиль -->
         <Style Selector="Button.profile-btn">
             <Setter Property="Background" Value="White"/>
             <Setter Property="Foreground" Value="#3E2723"/>
@@ -220,7 +216,7 @@
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
-        <!-- Мини-кнопки таймера смены в нижней статусной строке -->
+        <!-- таймер смены -->
         <Style Selector="Button.timer-btn">
             <Setter Property="Background" Value="#DDD0C2"/>
             <Setter Property="Foreground" Value="#5D4037"/>
@@ -239,7 +235,7 @@
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
-        <!-- Иконка-глазик внутри поля пароля -->
+        <!-- кнопка показа пароля -->
         <Style Selector="Button.pwd-eye">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#8D6E63"/>
@@ -274,7 +270,7 @@
             <Setter Property="Opacity" Value="0.45"/>
         </Style>
 
-        <!-- Вкладки страницы Клуб Аллюр (округлые светлые пилюли) -->
+        <!-- вкладки клуба -->
         <Style Selector="Button.subtab-club">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#5D4037"/>
@@ -303,7 +299,7 @@
             <Setter Property="TextBlock.Foreground" Value="White"/>
         </Style>
 
-        <!-- Вкладки страницы Ипподром (темно-коричневые строгие с акцентом) -->
+        <!-- вкладки ипподрома -->
         <Style Selector="Button.subtab-hippo">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#6D4C41"/>

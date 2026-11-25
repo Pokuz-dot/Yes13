@@ -15,7 +15,7 @@ public partial class MainWindow
     private string _stallStatusFilter = "Все";
     private string _zootechPenaltyFilter = "Все";
 
-    // Страница Ипподром
+    // страница ипподрома
 
     private void ShowHippodromePage()
     {
@@ -215,7 +215,7 @@ public partial class MainWindow
         return btn;
     }
 
-    // Вкладка лошадей и ветеринарного допуска
+    // вкладка лошадей
 
     private Control BuildHippoHorsesTab()
     {
@@ -667,7 +667,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка денников и постоя
+    // вкладка денников
 
     private Control BuildHippoStallsTab()
     {
@@ -1210,7 +1210,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка рационов кормления
+    // вкладка рационов
 
     private Control BuildHippoRationsTab()
     {
@@ -1411,7 +1411,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка штрафов по конюшне и лошадям (Главный берейтор-зоотехник)
+    // вкладка штрафов по конюшне
 
     private Control BuildZootechPenaltiesTab()
     {

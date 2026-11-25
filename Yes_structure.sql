@@ -1,14 +1,8 @@
--- Структура базы данных Yes (КСК и ипподром «Аллюр»)
--- Импортируйте этот файл первым, затем выполните Yes_data.sql
-
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
 
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
+SET NAMES utf8mb4;
 
 CREATE DATABASE IF NOT EXISTS `Yes` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `Yes`;
@@ -26,14 +20,14 @@ DROP TABLE IF EXISTS `horse_breeds`;
 DROP TABLE IF EXISTS `users`;
 DROP TABLE IF EXISTS `roles`;
 
--- 1. Роли пользователей
+-- роли
 CREATE TABLE `roles` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 2. Пользователи системы
+-- пользователи
 CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `role_id` int(11) NOT NULL,
@@ -46,7 +40,7 @@ CREATE TABLE `users` (
   CONSTRAINT `fk_users_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 3. Породы лошадей
+-- породы лошадей
 CREATE TABLE `horse_breeds` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `breed_name` varchar(100) NOT NULL,
@@ -55,7 +49,7 @@ CREATE TABLE `horse_breeds` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 4. Лошади
+-- лошади
 CREATE TABLE `horses` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `breed_id` int(11) NOT NULL,
@@ -70,7 +64,7 @@ CREATE TABLE `horses` (
   CONSTRAINT `fk_horses_breed` FOREIGN KEY (`breed_id`) REFERENCES `horse_breeds` (`id`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 5. Всадники клуба (скидка определяется уровнем подготовки / льготой)
+-- всадники
 CREATE TABLE `club_riders` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `full_name` varchar(150) NOT NULL,
@@ -80,7 +74,7 @@ CREATE TABLE `club_riders` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 6. Заказы на тренировки и аренду манежа
+-- заказы
 CREATE TABLE `riding_orders` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `order_num` varchar(30) NOT NULL,
@@ -98,7 +92,7 @@ CREATE TABLE `riding_orders` (
   CONSTRAINT `fk_orders_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 7. Позиции тренировочных сессий
+-- позиции тренировок
 CREATE TABLE `riding_session_items` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `order_id` int(11) NOT NULL,
@@ -114,7 +108,7 @@ CREATE TABLE `riding_session_items` (
   CONSTRAINT `fk_items_order` FOREIGN KEY (`order_id`) REFERENCES `riding_orders` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 8. Снаряжение клуба
+-- снаряжение
 CREATE TABLE `equipment_items` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `inventory_code` varchar(30) NOT NULL,
@@ -129,7 +123,7 @@ CREATE TABLE `equipment_items` (
   UNIQUE KEY `inventory_code` (`inventory_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 9. Денники конюшни
+-- денники
 CREATE TABLE `stalls` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `stall_code` varchar(30) NOT NULL,
@@ -147,7 +141,7 @@ CREATE TABLE `stalls` (
   CONSTRAINT `fk_stalls_horse` FOREIGN KEY (`horse_id`) REFERENCES `horses` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 10. Рационы кормления
+-- рационы
 CREATE TABLE `feeding_rations` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `horse_id` int(11) NOT NULL,
@@ -162,7 +156,7 @@ CREATE TABLE `feeding_rations` (
   CONSTRAINT `fk_rations_horse` FOREIGN KEY (`horse_id`) REFERENCES `horses` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 11. Заявки пользователей (тренировки, снаряжение, денники, запросы скидок)
+-- заявки
 CREATE TABLE `client_requests` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) NOT NULL,
@@ -184,7 +178,7 @@ CREATE TABLE `client_requests` (
   CONSTRAINT `fk_requests_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 12. Штрафы и нарушения (разделение: зоотехник — конюшня/лошади, админ манежа — снаряжение/манеж)
+-- штрафы
 CREATE TABLE `penalties` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `rider_name` varchar(150) NOT NULL,
@@ -200,7 +194,3 @@ CREATE TABLE `penalties` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 COMMIT;
-
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

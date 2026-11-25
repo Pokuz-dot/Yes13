@@ -291,7 +291,7 @@ public static class Database
             LastError = string.Empty;
             EnsureSchema(conn);
 
-            // 1. Роли
+            // роли
             var roles = new List<RoleItem>();
             using (var cmd = new MySqlCommand("SELECT id, name FROM roles ORDER BY id;", conn))
             using (var reader = cmd.ExecuteReader())
@@ -319,7 +319,7 @@ public static class Database
                 data.Roles.AddRange(roles);
             }
 
-            // 2. Пользователи (для выдачи ролей админом)
+            // пользователи
             var users = new List<ManagedUserItem>();
             const string usersSql = @"
                 SELECT u.id, u.role_id, r.name AS role_name, u.login, u.full_name
@@ -345,7 +345,7 @@ public static class Database
             data.Users.Clear();
             data.Users.AddRange(users);
 
-            // 3. Породы лошадей
+            // породы лошадей
             var breeds = new List<HorseBreed>();
             using (var cmd = new MySqlCommand("SELECT id, breed_name, temperament, origin_country FROM horse_breeds ORDER BY id;", conn))
             using (var reader = cmd.ExecuteReader())
@@ -364,7 +364,7 @@ public static class Database
             data.Breeds.Clear();
             data.Breeds.AddRange(breeds);
 
-            // 4. Лошади
+            // лошади
             var horses = new List<HorseItem>();
             const string horsesSql = @"
                 SELECT h.id, h.breed_id, hb.breed_name, hb.temperament, hb.origin_country,
@@ -397,7 +397,7 @@ public static class Database
             data.Horses.AddRange(horses);
             data.NextHorseId = horses.Count > 0 ? horses.Max(h => h.Id) + 1 : 1;
 
-            // 5. Всадники клуба
+            // всадники
             var riders = new List<ClubRider>();
             using (var cmd = new MySqlCommand("SELECT id, full_name, phone, skill_level, discount_rate FROM club_riders ORDER BY id;", conn))
             using (var reader = cmd.ExecuteReader())
@@ -421,7 +421,7 @@ public static class Database
             data.Riders.AddRange(riders);
             data.NextRiderId = riders.Count > 0 ? riders.Max(r => r.Id) + 1 : 1;
 
-            // 6. Заказы и позиции тренировок
+            // заказы и позиции тренировок
             var orders = new List<RidingOrder>();
             const string ordersSql = @"
                 SELECT o.id, o.order_num, o.user_id, o.club_rider_id,
@@ -496,7 +496,7 @@ public static class Database
             }
             data.NextOrderSequence = maxSeq + 1;
 
-            // 7. Заявки пользователей
+            // заявки
             var requests = new List<ClientRequestItem>();
             const string reqSql = @"
                 SELECT id, user_id, requester_name, request_type, target_name, horse_id,
@@ -534,7 +534,7 @@ public static class Database
             data.Requests.AddRange(requests);
             data.NextRequestId = requests.Count > 0 ? requests.Max(r => r.Id) + 1 : 1;
 
-            // 8. Снаряжение
+            // снаряжение
             var equipment = new List<EquipmentRentalItem>();
             const string eqSql = @"
                 SELECT id, inventory_code, name, category, size, price_per_hour, status, rented_by_rider, order_num
@@ -567,7 +567,7 @@ public static class Database
                 data.NextEquipmentId = equipment.Max(e => e.Id) + 1;
             }
 
-            // 9. Денники
+            // денники
             var stalls = new List<StallItem>();
             const string stallsSql = @"
                 SELECT id, stall_code, wing_section, stall_type, horse_id, horse_name, breed_name, owner_or_boarding_type, reserved_until, status
@@ -600,7 +600,7 @@ public static class Database
                 data.Stalls.AddRange(stalls);
             }
 
-            // 10. Рационы кормления
+            // рационы
             var rations = new List<FeedingRationItem>();
             const string rationsSql = @"
                 SELECT id, horse_id, horse_name, stall_code, morning_feed, day_feed, evening_feed, diet_note
@@ -631,7 +631,7 @@ public static class Database
                 data.Rations.AddRange(rations);
             }
 
-            // 11. Штрафы
+            // штрафы
             var penalties = new List<PenaltyItem>();
             const string penSql = @"
                 SELECT id, rider_name, issued_by_name, issuer_role, category, reason, target_object, amount, status, created_at

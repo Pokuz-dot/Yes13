@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Avalo;
 
-// Модели под таблицы базы данных и интерфейс
+// модели
 
 public class RoleItem
 {
@@ -204,7 +204,7 @@ public class PenaltyItem
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
-// Расчет стоимости, переходы статусов и экспорт
+// логика и расчеты
 
 public static class ClubLogic
 {
@@ -479,7 +479,7 @@ public static class ClubLogic
     }
 }
 
-// Стартовые данные в памяти (позже заменятся на запросы в MySQL)
+// стартовые данные
 
 public class MockClubData
 {
@@ -570,7 +570,6 @@ public class MockClubData
             CreateSeedOrder(4, 2026, 4, Riders[3], Horses[5], today.AddHours(9), 90, false, ClubLogic.OrderStatuses.Completed, "Открытый плац"),
             CreateSeedOrder(5, 2026, 5, Riders[4], Horses[3], today.AddHours(16), 45, false, ClubLogic.OrderStatuses.CancelledVet, "Крытый манеж 1", "Ветеринарный карантин копытного сустава"),
             CreateSeedOrder(6, 2026, 6, Riders[5], Horses[2], today.AddHours(17), 45, true, ClubLogic.OrderStatuses.Booked, "Учебный манеж"),
-            // История посещений постоянных клиентов за прошлые недели
             CreateSeedOrder(7, 2026, 7, Riders[3], Horses[4], today.AddDays(-2).AddHours(10), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж"),
             CreateSeedOrder(8, 2026, 8, Riders[0], Horses[0], today.AddDays(-2).AddHours(15), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж"),
             CreateSeedOrder(9, 2026, 9, Riders[3], Horses[2], today.AddDays(-4).AddHours(11), 45, false, ClubLogic.OrderStatuses.Completed, "Открытый плац"),

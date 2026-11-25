@@ -20,7 +20,7 @@ public partial class MainWindow
     private string _requestStatusFilter = "Все";
     private string _penaltyStatusFilter = "Все";
 
-    // Страница Клуб Аллюр
+    // страница клуба
 
     private void ShowClubPage()
     {
@@ -39,7 +39,7 @@ public partial class MainWindow
             RowSpacing = 12
         };
 
-        // 1. Шапка раздела в зависимости от роли
+        // шапка
         string headerTitle;
         string headerSubtitle;
         Control[] kpiCards;
@@ -148,7 +148,7 @@ public partial class MainWindow
         Grid.SetRow(bannerCard, 0);
         layout.Children.Add(bannerCard);
 
-        // 2. Вкладки по роли пользователя
+        // вкладки
         var tabsPanel = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -203,7 +203,7 @@ public partial class MainWindow
         Grid.SetRow(tabBar, 1);
         layout.Children.Add(tabBar);
 
-        // 3. Содержимое активной вкладки
+        // содержимое вкладки
         var tableContainer = new Border
         {
             Background = Brushes.White,
@@ -267,7 +267,7 @@ public partial class MainWindow
         return btn;
     }
 
-    // Вкладка заявок для клиента
+    // вкладка заявок для клиента
 
     private Control BuildClientRequestsTab()
     {
@@ -506,7 +506,7 @@ public partial class MainWindow
         return grid;
     }
 
-    // Вкладка входящих заявок для администратора манежа
+    // вкладка входящих заявок для админа
 
     private Control BuildAdminRequestsTab()
     {
@@ -1431,7 +1431,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка управления ролями, логинами и паролями (только для администратора)
+    // вкладка пользователей и ролей
 
     private Control BuildAdminUsersTab()
     {
@@ -1712,7 +1712,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка аренды манежа и расписания тренировок
+    // вкладка манежа и тренировок
 
     private Control BuildClubArenaTab()
     {
@@ -2352,7 +2352,6 @@ public partial class MainWindow
             "Маршрутный лист тренировки",
             "Акт проверки снаряжения и контроль целостности документа"));
 
-        // 1. Верхняя карточка документа
         var docHeaderGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -2392,7 +2391,6 @@ public partial class MainWindow
             Child = docHeaderGrid
         });
 
-        // 2. Основные реквизиты (2 колонки)
         Border MakeInfoCell(string label, string value, string? subValue = null, bool highlightOrange = false)
         {
             var stack = new StackPanel { Spacing = 2 };
@@ -2476,7 +2474,6 @@ public partial class MainWindow
             });
         }
 
-        // 3. Позиции тренировки
         var sessionsStack = new StackPanel { Spacing = 6 };
         sessionsStack.Children.Add(new TextBlock
         {
@@ -2559,7 +2556,6 @@ public partial class MainWindow
 
         box.Children.Add(sessionsStack);
 
-        // 4. Акт проверки снаряжения и подпись инструктора
         Border MakeCheckRow(string text)
         {
             var r = new StackPanel
@@ -2624,7 +2620,6 @@ public partial class MainWindow
             Child = actStack
         });
 
-        // 5. Контроль целостности (SHA-256)
         box.Children.Add(new Border
         {
             Background = Brush.Parse("#F5EFE8"),
@@ -2750,7 +2745,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка аренды снаряжения (седла, шлемы)
+    // вкладка снаряжения
 
     private Control BuildClubEquipmentTab()
     {
@@ -3229,7 +3224,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка всадников и скидок
+    // вкладка всадников и скидок
 
     private Control BuildClubRidersTab()
     {
@@ -3578,7 +3573,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка штрафов и нарушений (Администратор манежа)
+    // вкладка штрафов для админа
 
     private Control BuildAdminPenaltiesTab()
     {
@@ -3865,7 +3860,7 @@ public partial class MainWindow
         return grid;
     }
 
-    // Вкладка штрафов (Клиент, только чтение)
+    // вкладка штрафов для клиента
 
     private Control BuildClientPenaltiesTab()
     {

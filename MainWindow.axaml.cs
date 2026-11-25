@@ -103,7 +103,7 @@ public partial class MainWindow : Window
         ShowLogin();
     }
 
-    // Таймер смены (45 минут)
+    // таймер смены
 
     private void ToggleShiftTimer()
     {
@@ -288,7 +288,6 @@ public partial class MainWindow : Window
                 using var ms = new MemoryStream(44 + dataBytes);
                 using var bw = new BinaryWriter(ms, Encoding.ASCII, leaveOpen: true);
 
-                // RIFF/WAVE PCM 16-bit mono
                 bw.Write(Encoding.ASCII.GetBytes("RIFF"));
                 bw.Write(36 + dataBytes);
                 bw.Write(Encoding.ASCII.GetBytes("WAVE"));
@@ -335,7 +334,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // Уведомления и модальные окна
+    // уведомления и модалки
 
     private void ShowToast(string message)
     {
@@ -392,7 +391,7 @@ public partial class MainWindow : Window
         timer.Start();
     }
 
-    // Профиль в верхней панели
+    // профиль
 
     private void UpdateProfilePanel()
     {
@@ -606,7 +605,7 @@ public partial class MainWindow : Window
         _profilePopup.Open();
     }
 
-    // Авторизация
+    // авторизация
 
     private static readonly Geometry _eyeOpenGeometry = Geometry.Parse(
         "m10.051 7.0032c2.215 0 4.0105 1.7901 4.0105 3.9984s-1.7956 3.9984-4.0105 3.9984c-2.215 0-4.0105-1.7901-4.0105-3.9984s1.7956-3.9984 4.0105-3.9984zm0 1.4994c-1.3844 0-2.5066 1.1188-2.5066 2.499s1.1222 2.499 2.5066 2.499 2.5066-1.1188 2.5066-2.499-1.1222-2.499-2.5066-2.499zm0-5.0026c4.6257 0 8.6188 3.1487 9.7267 7.5613 0.10085 0.40165-0.14399 0.80877-0.54686 0.90931-0.40288 0.10054-0.81122-0.14355-0.91208-0.54521-0.94136-3.7492-4.3361-6.4261-8.2678-6.4261-3.9334 0-7.3292 2.6792-8.2689 6.4306-0.10063 0.40171-0.50884 0.64603-0.91177 0.54571s-0.648-0.5073-0.54737-0.90901c1.106-4.4152 5.1003-7.5667 9.728-7.5667z");
@@ -778,7 +777,6 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // Автономный режим при выключенной MySQL
             var offlineMatch = _data.Users.FirstOrDefault(u =>
                 u.Login.Equals(login, StringComparison.OrdinalIgnoreCase));
 
@@ -829,7 +827,7 @@ public partial class MainWindow : Window
         MainContent.Content = formContainer;
     }
 
-    // Регистрация
+    // регистрация
 
     private void ShowRegister()
     {
@@ -1034,7 +1032,7 @@ public partial class MainWindow : Window
             ShowClubPage();
     }
 
-    // Общие элементы оформления
+    // общие элементы
 
     private static Border CreateBadge(string text, string bgHex, string fgHex, string? borderHex = null)
     {
@@ -1195,7 +1193,7 @@ public partial class MainWindow : Window
         };
     }
 
-    // Глобальная авто-подсказка полного текста при обрезке/переполнении в любом месте приложения
+    // подсказки для обрезанного текста
 
     private void OnWindowPointerMovedForTooltips(object? sender, PointerEventArgs e)
     {
@@ -1246,7 +1244,6 @@ public partial class MainWindow : Window
             && currentTip is string s
             && s == savedAuto;
 
-        // Если на элементе уже задана ручная подсказка — не затираем её
         if (currentTip != null && !isOwnedByAuto)
             return;
 

@@ -11,7 +11,7 @@
 
     <Grid>
         <DockPanel>
-            <!-- Неизменная верхняя панель с логотипом, переключателем и профилем -->
+            <!-- верхняя панель -->
             <Border x:Name="TopPanel"
                     DockPanel.Dock="Top"
                     IsVisible="False"
@@ -20,7 +20,6 @@
                     BorderThickness="0,0,0,1.5"
                     Padding="18,10">
                 <Grid ColumnDefinitions="*,Auto,*">
-                    <!-- Левая зона: логотип и название -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                         <Border Width="36" Height="36" CornerRadius="10" Background="#E65100">
                             <TextBlock Text="А"
@@ -41,7 +40,6 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!-- Центр: переключатель разделов -->
                     <Border Grid.Column="1" Classes="toggle-container" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <Button x:Name="BtnClub" Classes="toggle-btn" Content="Клуб Аллюр" />
@@ -49,7 +47,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Правая зона: профиль пользователя -->
                     <Button x:Name="BtnProfile"
                             Grid.Column="2"
                             Classes="profile-btn"
@@ -85,7 +82,7 @@
                 </Grid>
             </Border>
 
-            <!-- Незаметная нижняя строка статуса с таймером академического часа (45 мин) -->
+            <!-- нижняя строка статуса -->
             <Border x:Name="BottomStatusBar"
                     DockPanel.Dock="Bottom"
                     IsVisible="False"
@@ -133,13 +130,13 @@
                 </Grid>
             </Border>
 
-            <!-- Основная область страниц -->
+            <!-- основная область -->
             <Grid>
                 <ContentControl x:Name="MainContent" />
             </Grid>
         </DockPanel>
 
-        <!-- Всплывающее уведомление (Toast) -->
+        <!-- уведомление -->
         <Border x:Name="ToastBanner"
                 IsVisible="False"
                 Background="#3E2723"
@@ -157,7 +154,7 @@
                        FontWeight="SemiBold" />
         </Border>
 
-        <!-- Слой модального окна -->
+        <!-- модальное окно -->
         <Border x:Name="ModalOverlay"
                 IsVisible="False"
                 Background="#7A261612"

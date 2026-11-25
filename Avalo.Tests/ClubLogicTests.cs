@@ -10,7 +10,6 @@ public class ClubLogicTests
     [Fact]
     public void Test1_StandardSessionCostAndOrderTotal_CalculatedCorrectly()
     {
-        // (duration_minutes / 45) * 1500 + (has_trainer ? 1000 : 0)
         Assert.Equal(1500m, ClubLogic.CalculateSessionCost(45, hasTrainer: false, discountRate: 0m));
         Assert.Equal(2500m, ClubLogic.CalculateSessionCost(45, hasTrainer: true, discountRate: 0m));
         Assert.Equal(4000m, ClubLogic.CalculateSessionCost(90, hasTrainer: true, discountRate: 0m));
@@ -57,24 +56,19 @@ public class ClubLogicTests
     [Fact]
     public void Test2_DiscountsTrainerSurchargeAndPenalties_AppliedCorrectly()
     {
-        // Скидки по клубным категориям
         Assert.Equal(5m, ClubLogic.GetDiscountForSkill("Любитель"));
         Assert.Equal(10m, ClubLogic.GetDiscountForSkill("Опытный всадник"));
         Assert.Equal(15m, ClubLogic.GetDiscountForSkill("Спортсмен (конкур)"));
         Assert.Equal(20m, ClubLogic.GetDiscountForSkill("Льготный / Безлимит"));
 
-        // 90 мин + тренер = 4000 руб.; со скидкой 10% = 3600 руб.
         Assert.Equal(3600m, ClubLogic.CalculateSessionCost(90, hasTrainer: true, discountRate: 10m));
-        // 45 мин + тренер = 2500 руб.; со скидкой 15% = 2125 руб.
         Assert.Equal(2125m, ClubLogic.CalculateSessionCost(45, hasTrainer: true, discountRate: 15m));
-        // Льгота 20%: 4000 * 0.8 = 3200 руб.; без тренера 3000 * 0.8 = 2400 руб. (надбавка тренера со скидкой = 800 руб.)
         decimal withTrainer = ClubLogic.CalculateSessionCost(90, hasTrainer: true, discountRate: 20m);
         decimal withoutTrainer = ClubLogic.CalculateSessionCost(90, hasTrainer: false, discountRate: 20m);
         Assert.Equal(3200m, withTrainer);
         Assert.Equal(2400m, withoutTrainer);
         Assert.Equal(800m, withTrainer - withoutTrainer);
 
-        // Расчет неоплаченных штрафов конкретного клиента
         var penalties = new List<PenaltyItem>
         {
             new() { Id = 1, RiderName = "Соколов Дмитрий Андреевич", Amount = 1000m, Status = "Не оплачен" },
@@ -107,7 +101,6 @@ public class ClubLogicTests
         Assert.Equal(ClubLogic.OrderStatuses.Completed, order.Status);
         Assert.True(ClubLogic.IsClosedStatus(order.Status));
 
-        // Проверка разрешенной ветки отмены по ветеринарным показаниям
         var cancelledOrder = new RidingOrder
         {
             Id = 11,
@@ -130,7 +123,6 @@ public class ClubLogicTests
     [Fact]
     public void Test4_InvalidFsmOrClosedOrderModification_ThrowsInvalidOperationException()
     {
-        // 1. Недопустимый пропуск этапов FSM (Забронировано -> Завершена успешно)
         var bookedOrder = new RidingOrder
         {
             Id = 20,
@@ -141,11 +133,9 @@ public class ClubLogicTests
         Assert.Throws<InvalidOperationException>(() =>
             ClubLogic.TransitionOrderStatus(bookedOrder, ClubLogic.OrderStatuses.Completed, horseReadyForTraining: true));
 
-        // 2. Блокировка при отсутствии ветеринарного допуска (is_ready_for_training == false)
         Assert.Throws<InvalidOperationException>(() =>
             ClubLogic.TransitionOrderStatus(bookedOrder, ClubLogic.OrderStatuses.Saddled, horseReadyForTraining: false));
 
-        // 3. Попытка перевода статуса и редактирования закрытого документа
         var closedOrder = new RidingOrder
         {
             Id = 21,
@@ -170,7 +160,6 @@ public class ClubLogicTests
                 HasTrainer = false
             }, horseReadyForTraining: true));
 
-        // 4. Контроль переутомления лошади (более 180 минут в сутки)
         Assert.Throws<InvalidOperationException>(() =>
             ClubLogic.AddSessionItem(bookedOrder, new RidingSessionItem
             {
