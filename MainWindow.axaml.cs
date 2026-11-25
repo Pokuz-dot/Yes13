@@ -1,17 +1,28 @@
 using System;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace Avalo;
 
 public partial class MainWindow : Window
 {
+    private static readonly ConditionalWeakTable<Control, string> _autoTooltipTexts = new();
+
+    static MainWindow()
+    {
+        SizeChangedEvent.AddClassHandler<TextBlock>((tb, _) => UpdateAutoTooltip(tb));
+        LoadedEvent.AddClassHandler<TextBlock>((tb, _) => UpdateAutoTooltip(tb));
+    }
+
     private readonly MockClubData _data = new();
 
     private readonly IBrush _textDarkBrown = Brush.Parse("#3E2723");
@@ -31,6 +42,7 @@ public partial class MainWindow : Window
 
     private readonly DispatcherTimer _toastTimer;
     private Popup? _profilePopup;
+    private TextBlock? _lastTooltipCheckedBlock;
 
     private int _clubTabIndex;
     private int _hippoTabIndex;
@@ -42,6 +54,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        AddHandler(PointerMovedEvent, OnWindowPointerMovedForTooltips, RoutingStrategies.Tunnel);
 
         _shiftTimer = new DispatcherTimer
         {
@@ -277,7 +290,7 @@ public partial class MainWindow : Window
             }
         });
 
-        var nameStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2 };
+        var nameStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2, MaxWidth = 216 };
         nameStack.Children.Add(new TextBlock
         {
             Text = user.FullName,
@@ -291,7 +304,8 @@ public partial class MainWindow : Window
             Text = $"@{user.Login} | {user.RoleName}",
             FontSize = 12,
             Foreground = _accentOrange,
-            FontWeight = FontWeight.SemiBold
+            FontWeight = FontWeight.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis
         });
         headerRow.Children.Add(nameStack);
         cardContent.Children.Add(headerRow);
@@ -413,22 +427,25 @@ public partial class MainWindow : Window
 
         cardContent.Children.Add(btnLogout);
 
+        var popupBorder = new Border
+        {
+            Width = 300,
+            Background = Brushes.White,
+            BorderBrush = _textMutedBrown,
+            BorderThickness = new Thickness(1.5),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(14),
+            Child = cardContent
+        };
+        popupBorder.AddHandler(PointerMovedEvent, OnWindowPointerMovedForTooltips, RoutingStrategies.Tunnel);
+
         _profilePopup = new Popup
         {
             PlacementTarget = BtnProfile,
             Placement = PlacementMode.BottomEdgeAlignedRight,
             VerticalOffset = 6,
             IsLightDismissEnabled = true,
-            Child = new Border
-            {
-                Width = 300,
-                Background = Brushes.White,
-                BorderBrush = _textMutedBrown,
-                BorderThickness = new Thickness(1.5),
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(14),
-                Child = cardContent
-            }
+            Child = popupBorder
         };
         _profilePopup.Open();
     }
@@ -755,7 +772,8 @@ public partial class MainWindow : Window
                 Text = text,
                 Foreground = Brush.Parse(fgHex),
                 FontSize = 11,
-                FontWeight = FontWeight.Bold
+                FontWeight = FontWeight.Bold,
+                TextTrimming = TextTrimming.CharacterEllipsis
             }
         };
     }
@@ -880,6 +898,7 @@ public partial class MainWindow : Window
                 FontSize = 12,
                 FontWeight = FontWeight.Bold,
                 Foreground = darkStyle ? Brush.Parse("#FAF6F2") : Brush.Parse("#4E342E"),
+                TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center
             };
             Grid.SetColumn(tb, col);
@@ -894,5 +913,118 @@ public partial class MainWindow : Window
             CornerRadius = new CornerRadius(10, 10, 0, 0),
             Child = grid
         };
+    }
+
+    // Глобальная авто-подсказка полного текста при обрезке/переполнении в любом месте приложения
+
+    private void OnWindowPointerMovedForTooltips(object? sender, PointerEventArgs e)
+    {
+        if (e.Source is not Visual visual)
+            return;
+
+        var tb = visual as TextBlock
+            ?? visual.FindAncestorOfType<TextBlock>()
+            ?? (visual as Border)?.Child as TextBlock;
+
+        if (tb == null)
+        {
+            _lastTooltipCheckedBlock = null;
+            return;
+        }
+
+        if (ReferenceEquals(tb, _lastTooltipCheckedBlock))
+            return;
+
+        _lastTooltipCheckedBlock = tb;
+        UpdateAutoTooltip(tb);
+    }
+
+    private static void UpdateAutoTooltip(TextBlock tb)
+    {
+        string? text = tb.Text;
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        if (tb.FindAncestorOfType<TextBox>() != null || tb.FindAncestorOfType<ToolTip>() != null)
+            return;
+
+        var parentButton = tb.FindAncestorOfType<Button>();
+        if (parentButton != null && ToolTip.GetTip(parentButton) != null)
+            return;
+
+        bool clipped = IsTextClipped(tb);
+        SyncAutoTooltipOnControl(tb, clipped ? text : null);
+
+        if (tb.GetVisualParent() is Border parentBorder && ReferenceEquals(parentBorder.Child, tb))
+            SyncAutoTooltipOnControl(parentBorder, clipped ? text : null);
+    }
+
+    private static void SyncAutoTooltipOnControl(Control target, string? fullText)
+    {
+        object? currentTip = ToolTip.GetTip(target);
+        bool isOwnedByAuto = _autoTooltipTexts.TryGetValue(target, out string? savedAuto)
+            && currentTip is string s
+            && s == savedAuto;
+
+        // Если на элементе уже задана ручная подсказка — не затираем её
+        if (currentTip != null && !isOwnedByAuto)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(fullText))
+        {
+            if (!isOwnedByAuto || savedAuto != fullText)
+            {
+                ToolTip.SetTip(target, fullText);
+                _autoTooltipTexts.AddOrUpdate(target, fullText);
+            }
+        }
+        else if (isOwnedByAuto)
+        {
+            ToolTip.SetTip(target, null);
+            _autoTooltipTexts.Remove(target);
+        }
+    }
+
+    private static bool IsTextClipped(TextBlock tb)
+    {
+        if (tb.Bounds.Width <= 1 || tb.Bounds.Height <= 1)
+            return false;
+
+        var layout = tb.TextLayout;
+        if (layout != null)
+        {
+            foreach (var line in layout.TextLines)
+            {
+                if (line.HasCollapsed || line.HasOverflowed)
+                    return true;
+            }
+
+            if (layout.WidthIncludingTrailingWhitespace > tb.Bounds.Width + 0.5)
+                return true;
+
+            if (layout.Height > tb.Bounds.Height + 0.5)
+                return true;
+        }
+
+        if (!tb.IsAttachedToVisualTree())
+            return false;
+
+        Visual? ancestor = tb.GetVisualParent();
+        for (int depth = 0; depth < 3 && ancestor != null; depth++)
+        {
+            if (ancestor is Control parentCtrl && parentCtrl.Bounds.Width > 1)
+            {
+                var topRight = tb.TranslatePoint(new Point(tb.Bounds.Width, 0), parentCtrl);
+                if (topRight.HasValue && topRight.Value.X > parentCtrl.Bounds.Width + 1.0)
+                    return true;
+
+                var topLeft = tb.TranslatePoint(new Point(0, 0), parentCtrl);
+                if (topLeft.HasValue && topLeft.Value.X < -1.0)
+                    return true;
+            }
+            ancestor = ancestor.GetVisualParent();
+        }
+
+        return false;
     }
 }

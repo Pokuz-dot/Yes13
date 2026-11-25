@@ -93,13 +93,15 @@ public partial class MainWindow
                     Text = headerTitle,
                     FontSize = 20,
                     FontWeight = FontWeight.Bold,
-                    Foreground = _textDarkBrown
+                    Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis
                 },
                 new TextBlock
                 {
                     Text = headerSubtitle,
                     FontSize = 12,
-                    Foreground = _textMediumBrown
+                    Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis
                 }
             }
         };
@@ -393,6 +395,7 @@ public partial class MainWindow
                     FontSize = 12,
                     FontWeight = FontWeight.SemiBold,
                     Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
                 var cTarget = new StackPanel
@@ -418,7 +421,8 @@ public partial class MainWindow
                                 _ => "Запрос администратору"
                             },
                             FontSize = 11,
-                            Foreground = _textMutedBrown
+                            Foreground = _textMutedBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         }
                     }
                 };
@@ -428,7 +432,13 @@ public partial class MainWindow
                     Spacing = 2,
                     Children =
                     {
-                        new TextBlock { Text = req.ArenaZone, FontSize = 12, Foreground = _textDarkBrown },
+                        new TextBlock
+                        {
+                            Text = req.ArenaZone,
+                            FontSize = 12,
+                            Foreground = _textDarkBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        },
                         new TextBlock
                         {
                             Text = string.IsNullOrWhiteSpace(req.Comment) ? "-" : req.Comment,
@@ -627,6 +637,7 @@ public partial class MainWindow
                     FontSize = 12,
                     FontWeight = FontWeight.SemiBold,
                     Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -648,7 +659,8 @@ public partial class MainWindow
                         {
                             Text = req.ArenaZone,
                             FontSize = 11,
-                            Foreground = _textMutedBrown
+                            Foreground = _textMutedBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         }
                     }
                 };
@@ -665,7 +677,8 @@ public partial class MainWindow
                                 ? $"{req.DurationMinutes} мин, {(req.HasTrainer ? "с тренером" : "без тренера")}"
                                 : req.RequestType,
                             FontSize = 11,
-                            Foreground = _textDarkBrown
+                            Foreground = _textDarkBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         },
                         new TextBlock
                         {
@@ -1417,6 +1430,7 @@ public partial class MainWindow
                     FontSize = 13,
                     FontWeight = FontWeight.SemiBold,
                     Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -1425,6 +1439,7 @@ public partial class MainWindow
                     Text = $"@{user.Login}",
                     FontSize = 12,
                     Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -1788,7 +1803,8 @@ public partial class MainWindow
                         {
                             Text = order.RiderDiscount > 0 ? $"Скидка всадника: {order.RiderDiscount:0}%" : "Без льготной скидки",
                             FontSize = 11,
-                            Foreground = _textMutedBrown
+                            Foreground = _textMutedBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         }
                     }
                 };
@@ -2731,6 +2747,7 @@ public partial class MainWindow
                     Text = item.Category,
                     FontSize = 12,
                     Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -2739,6 +2756,7 @@ public partial class MainWindow
                     Text = item.Size,
                     FontSize = 12,
                     Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -2760,7 +2778,8 @@ public partial class MainWindow
                         {
                             Text = item.OrderNum == "-" ? "Склад амуниции" : item.OrderNum,
                             FontSize = 11,
-                            Foreground = _textMutedBrown
+                            Foreground = _textMutedBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         }
                     }
                 };
@@ -3167,6 +3186,7 @@ public partial class MainWindow
                     FontSize = 13,
                     FontWeight = FontWeight.SemiBold,
                     Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
                 var cPhone = new TextBlock
@@ -3174,6 +3194,7 @@ public partial class MainWindow
                     Text = rider.Phone,
                     FontSize = 12,
                     Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
                 var cSkill = new TextBlock
@@ -3181,6 +3202,7 @@ public partial class MainWindow
                     Text = rider.SkillLevel,
                     FontSize = 12,
                     Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
                 var cMember = new TextBlock
@@ -3189,6 +3211,7 @@ public partial class MainWindow
                     FontSize = 12,
                     FontWeight = FontWeight.SemiBold,
                     Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
                 var cDisc = rider.DiscountRate > 0
@@ -3589,7 +3612,8 @@ public partial class MainWindow
                         {
                             Text = p.IssuerRole == "Главный берейтор-зоотехник" ? "Зоотехник" : "Админ манежа",
                             FontSize = 10.5,
-                            Foreground = _textMutedBrown
+                            Foreground = _textMutedBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         }
                     }
                 };
@@ -3841,12 +3865,29 @@ public partial class MainWindow
                     TextWrapping = TextWrapping.Wrap,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                var cIssuer = new TextBlock
+                string issuerRoleShort = p.IssuerRole == "Главный берейтор-зоотехник" ? "Зоотехник" : "Администратор";
+                var cIssuer = new StackPanel
                 {
-                    Text = $"{p.IssuedByName}\n({(p.IssuerRole == "Главный берейтор-зоотехник" ? "Зоотехник" : "Администратор")})",
-                    FontSize = 11.5,
-                    Foreground = _textMutedBrown,
-                    VerticalAlignment = VerticalAlignment.Center
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Spacing = 1,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = p.IssuedByName,
+                            FontSize = 11.5,
+                            FontWeight = FontWeight.SemiBold,
+                            Foreground = _textDarkBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        },
+                        new TextBlock
+                        {
+                            Text = $"({issuerRoleShort})",
+                            FontSize = 10.5,
+                            Foreground = _textMutedBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        }
+                    }
                 };
                 var cAmount = new TextBlock
                 {

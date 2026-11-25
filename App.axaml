@@ -11,6 +11,17 @@
             <Setter Property="Background" Value="#EAE0D5"/>
         </Style>
 
+        <!-- Прозрачный фон текста для надежного срабатывания наведения по всей области -->
+        <Style Selector="TextBlock">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+
+        <!-- Аккуратный перенос длинного текста во всплывающих подсказках -->
+        <Style Selector="ToolTip">
+            <Setter Property="MaxWidth" Value="420"/>
+            <Setter Property="TextBlock.TextWrapping" Value="Wrap"/>
+        </Style>
+
         <!-- Поля ввода (белые с коричневой рамкой) -->
         <Style Selector="TextBox">
             <Setter Property="Background" Value="White"/>

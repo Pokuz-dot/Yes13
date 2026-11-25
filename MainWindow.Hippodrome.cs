@@ -66,13 +66,15 @@ public partial class MainWindow
                     Text = hippoTitle,
                     FontSize = 20,
                     FontWeight = FontWeight.Bold,
-                    Foreground = Brushes.White
+                    Foreground = Brushes.White,
+                    TextTrimming = TextTrimming.CharacterEllipsis
                 },
                 new TextBlock
                 {
                     Text = hippoSubtitle,
                     FontSize = 12,
-                    Foreground = _borderSand
+                    Foreground = _borderSand,
+                    TextTrimming = TextTrimming.CharacterEllipsis
                 }
             }
         };
@@ -338,13 +340,15 @@ public partial class MainWindow
                             Text = horse.Nickname,
                             FontSize = 14,
                             FontWeight = FontWeight.Bold,
-                            Foreground = _textDarkBrown
+                            Foreground = _textDarkBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         },
                         new TextBlock
                         {
                             Text = $"{horse.BirthYear} г.р., {horse.SuitColor}",
                             FontSize = 11,
-                            Foreground = _textMediumBrown
+                            Foreground = _textMediumBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         }
                     }
                 };
@@ -360,13 +364,15 @@ public partial class MainWindow
                             Text = $"{horse.BreedName} ({horse.OriginCountry})",
                             FontSize = 12,
                             FontWeight = FontWeight.SemiBold,
-                            Foreground = _textDarkBrown
+                            Foreground = _textDarkBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         },
                         new TextBlock
                         {
                             Text = horse.Temperament,
                             FontSize = 11,
-                            Foreground = _textMutedBrown
+                            Foreground = _textMutedBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         }
                     }
                 };
@@ -376,6 +382,7 @@ public partial class MainWindow
                     Text = horse.PassportChipCode,
                     FontSize = 12,
                     Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -777,8 +784,8 @@ public partial class MainWindow
                     Spacing = 2,
                     Children =
                     {
-                        new TextBlock { Text = stall.WingSection, FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = _textDarkBrown },
-                        new TextBlock { Text = stall.StallType, FontSize = 11, Foreground = _textMutedBrown }
+                        new TextBlock { Text = stall.WingSection, FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = _textDarkBrown, TextTrimming = TextTrimming.CharacterEllipsis },
+                        new TextBlock { Text = stall.StallType, FontSize = 11, Foreground = _textMutedBrown, TextTrimming = TextTrimming.CharacterEllipsis }
                     }
                 };
 
@@ -793,9 +800,10 @@ public partial class MainWindow
                             Text = stall.HorseName,
                             FontSize = 12,
                             FontWeight = stall.Status == "Свободен" ? FontWeight.Normal : FontWeight.SemiBold,
-                            Foreground = stall.Status == "Свободен" ? _textMutedBrown : _textDarkBrown
+                            Foreground = stall.Status == "Свободен" ? _textMutedBrown : _textDarkBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         },
-                        new TextBlock { Text = stall.BreedName, FontSize = 11, Foreground = _textMutedBrown }
+                        new TextBlock { Text = stall.BreedName, FontSize = 11, Foreground = _textMutedBrown, TextTrimming = TextTrimming.CharacterEllipsis }
                     }
                 };
 
@@ -813,6 +821,7 @@ public partial class MainWindow
                     Text = stall.ReservedUntil,
                     FontSize = 12,
                     Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -1158,8 +1167,8 @@ public partial class MainWindow
                     Spacing = 2,
                     Children =
                     {
-                        new TextBlock { Text = ration.HorseName, FontSize = 13, FontWeight = FontWeight.Bold, Foreground = _textDarkBrown },
-                        new TextBlock { Text = $"Денник: {ration.StallCode}", FontSize = 11, Foreground = _textMediumBrown }
+                        new TextBlock { Text = ration.HorseName, FontSize = 13, FontWeight = FontWeight.Bold, Foreground = _textDarkBrown, TextTrimming = TextTrimming.CharacterEllipsis },
+                        new TextBlock { Text = $"Денник: {ration.StallCode}", FontSize = 11, Foreground = _textMediumBrown, TextTrimming = TextTrimming.CharacterEllipsis }
                     }
                 };
 
