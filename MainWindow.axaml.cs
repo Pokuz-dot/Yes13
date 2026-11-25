@@ -328,6 +328,74 @@ public partial class MainWindow : Window
             Child = infoStack
         });
 
+        if (IsClient)
+        {
+            var myRider = _data.FindRiderByName(user.FullName);
+            decimal myDiscount = myRider?.DiscountRate ?? 0m;
+            string mySkill = myRider?.SkillLevel ?? "Начинающий";
+            int mySessions = _data.GetRiderSessionCount(myRider?.Id, user.FullName);
+            var unpaidPenalties = _data.Penalties
+                .Where(p => p.RiderName.Equals(user.FullName, StringComparison.OrdinalIgnoreCase) && p.Status == "Не оплачен")
+                .ToList();
+
+            var clientInfoStack = new StackPanel { Spacing = 4 };
+            clientInfoStack.Children.Add(new TextBlock
+            {
+                Text = "Карточка клиента:",
+                FontSize = 11,
+                FontWeight = FontWeight.Bold,
+                Foreground = _textMediumBrown
+            });
+            clientInfoStack.Children.Add(new TextBlock
+            {
+                Text = $"Уровень / тариф: {mySkill} (скидка {myDiscount:0}%)",
+                FontSize = 12,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = _textDarkBrown,
+                TextWrapping = TextWrapping.Wrap
+            });
+            clientInfoStack.Children.Add(new TextBlock
+            {
+                Text = $"Заказов тренировок: {mySessions} зан.",
+                FontSize = 12,
+                Foreground = _textMediumBrown
+            });
+            if (unpaidPenalties.Count > 0)
+            {
+                decimal unpaidTotal = unpaidPenalties.Sum(p => p.Amount);
+                clientInfoStack.Children.Add(new TextBlock
+                {
+                    Text = $"Неоплаченные штрафы: {unpaidPenalties.Count} ({unpaidTotal:N0} ₽)",
+                    FontSize = 12,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = Brush.Parse("#9F1239")
+                });
+            }
+
+            cardContent.Children.Add(new Border
+            {
+                Background = Brush.Parse("#FAF6F2"),
+                BorderBrush = _borderSand,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(10, 8),
+                Child = clientInfoStack
+            });
+
+            var btnDiscountReq = new Button
+            {
+                Content = "Запросить скидку / льготу",
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            btnDiscountReq.Classes.Add("compact");
+            btnDiscountReq.Click += (_, _) =>
+            {
+                _profilePopup?.Close();
+                OpenDiscountRequestModal();
+            };
+            cardContent.Children.Add(btnDiscountReq);
+        }
+
         var btnLogout = new Button
         {
             Content = "Выйти из аккаунта",

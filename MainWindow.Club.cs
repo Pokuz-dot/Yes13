@@ -15,6 +15,7 @@ public partial class MainWindow
     private string _clubStatusFilter = "Все";
     private string _equipStatusFilter = "Все";
     private string _requestStatusFilter = "Все";
+    private string _penaltyStatusFilter = "Все";
 
     // Страница Клуб Аллюр
 
@@ -44,15 +45,15 @@ public partial class MainWindow
         {
             int myRequests = _data.Requests.Count(r => r.UserId == _data.CurrentUser.Id || r.RequesterName == _data.CurrentUser.FullName);
             int myApproved = _data.Orders.Count(o => o.RiderName.Equals(_data.CurrentUser.FullName, StringComparison.OrdinalIgnoreCase));
-            int freeEquip = _data.Equipment.Count(e => e.Status == "Свободно");
+            decimal myDiscount = _data.GetRiderDiscount(_data.CurrentUser.FullName);
 
             headerTitle = "Клуб «Аллюр» - Личный кабинет клиента";
-            headerSubtitle = "Отправляйте заявки администратору на тренировку, аренду манежа и снаряжения";
+            headerSubtitle = "Отправляйте заявки администратору на тренировку, аренду манежа, снаряжения или скидку";
             kpiCards = new Control[]
             {
                 CreateKpiCard("Моих заявок", myRequests.ToString(), false),
                 CreateKpiCard("Моих занятий", myApproved.ToString(), false),
-                CreateKpiCard("Свободно инвентаря", freeEquip.ToString(), false)
+                CreateKpiCard("Моя скидка", $"{myDiscount:0}%", false)
             };
         }
         else
@@ -65,7 +66,7 @@ public partial class MainWindow
                 ? "Клуб «Аллюр» - Панель администратора манежа"
                 : "Клуб «Аллюр» - Расписание манежа и снаряжение";
             headerSubtitle = IsArenaAdmin
-                ? "Обработка заявок клиентов, управление тренировками, снаряжением и ролями пользователей"
+                ? "Обработка заявок клиентов, управление тренировками, снаряжением, скидками и штрафами"
                 : "Просмотр расписания тренировок по конкуру и занятости снаряжения";
             kpiCards = new Control[]
             {
@@ -151,22 +152,31 @@ public partial class MainWindow
 
         if (IsClient)
         {
-            if (_clubTabIndex > 2) _clubTabIndex = 0;
+            if (_clubTabIndex > 3) _clubTabIndex = 0;
+            int myUnpaid = _data.Penalties.Count(p =>
+                p.RiderName.Equals(_data.CurrentUser.FullName, StringComparison.OrdinalIgnoreCase)
+                && p.Status == "Не оплачен");
+            string penTabTitle = myUnpaid > 0 ? $"Мои штрафы ({myUnpaid})" : "Мои штрафы";
+
             tabsPanel.Children.Add(CreateClubSubTabButton("Мои заявки", 0));
             tabsPanel.Children.Add(CreateClubSubTabButton("Аренда снаряжения", 1));
             tabsPanel.Children.Add(CreateClubSubTabButton("Мои занятия", 2));
+            tabsPanel.Children.Add(CreateClubSubTabButton(penTabTitle, 3));
         }
         else if (IsArenaAdmin)
         {
-            if (_clubTabIndex > 4) _clubTabIndex = 0;
+            if (_clubTabIndex > 5) _clubTabIndex = 0;
             int pending = _data.Requests.Count(r => r.Status == "На рассмотрении");
             string reqTabTitle = pending > 0 ? $"Заявки клиентов ({pending})" : "Заявки клиентов";
+            int unpaidPenalties = _data.Penalties.Count(p => p.Status == "Не оплачен");
+            string penTabTitle = unpaidPenalties > 0 ? $"Штрафы и нарушения ({unpaidPenalties})" : "Штрафы и нарушения";
 
             tabsPanel.Children.Add(CreateClubSubTabButton(reqTabTitle, 0));
             tabsPanel.Children.Add(CreateClubSubTabButton("Аренда манежа и тренировки", 1));
             tabsPanel.Children.Add(CreateClubSubTabButton("Аренда снаряжения", 2));
-            tabsPanel.Children.Add(CreateClubSubTabButton("Всадники и абонементы", 3));
-            tabsPanel.Children.Add(CreateClubSubTabButton("Пользователи и роли", 4));
+            tabsPanel.Children.Add(CreateClubSubTabButton("Всадники и скидки", 3));
+            tabsPanel.Children.Add(CreateClubSubTabButton(penTabTitle, 4));
+            tabsPanel.Children.Add(CreateClubSubTabButton("Пользователи и роли", 5));
         }
         else
         {
@@ -204,7 +214,8 @@ public partial class MainWindow
             {
                 0 => BuildClientRequestsTab(),
                 1 => BuildClubEquipmentTab(),
-                _ => BuildClubArenaTab()
+                2 => BuildClubArenaTab(),
+                _ => BuildClientPenaltiesTab()
             };
         }
         else if (IsArenaAdmin)
@@ -215,6 +226,7 @@ public partial class MainWindow
                 1 => BuildClubArenaTab(),
                 2 => BuildClubEquipmentTab(),
                 3 => BuildClubRidersTab(),
+                4 => BuildAdminPenaltiesTab(),
                 _ => BuildAdminUsersTab()
             };
         }
@@ -262,33 +274,38 @@ public partial class MainWindow
 
         var toolbar = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
-            ColumnSpacing = 10
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto"),
+            ColumnSpacing = 8
         };
 
         var searchBox = new TextBox
         {
-            PlaceholderText = "Поиск по своим заявкам (конь, манеж, снаряжение)...",
+            PlaceholderText = "Поиск по своим заявкам (конь, манеж, снаряжение, скидка)...",
             Text = _clubSearchQuery
         };
         searchBox.Classes.Add("compact");
 
         var filterCombo = new ComboBox
         {
-            Width = 185,
+            Width = 175,
             ItemsSource = new[] { "Все", "На рассмотрении", "Одобрено", "Отклонено" },
             SelectedItem = _requestStatusFilter
         };
         filterCombo.Classes.Add("compact");
 
-        var btnNewReq = new Button { Content = "+ Заявка на тренировку / манеж" };
+        var btnReqDiscount = new Button { Content = "Запрос скидки" };
+        btnReqDiscount.Classes.Add("secondary");
+
+        var btnNewReq = new Button { Content = "+ Тренировка / манеж" };
         btnNewReq.Classes.Add("compact");
 
         Grid.SetColumn(searchBox, 0);
         Grid.SetColumn(filterCombo, 1);
-        Grid.SetColumn(btnNewReq, 2);
+        Grid.SetColumn(btnReqDiscount, 2);
+        Grid.SetColumn(btnNewReq, 3);
         toolbar.Children.Add(searchBox);
         toolbar.Children.Add(filterCombo);
+        toolbar.Children.Add(btnReqDiscount);
         toolbar.Children.Add(btnNewReq);
 
         Grid.SetRow(toolbar, 0);
@@ -394,9 +411,12 @@ public partial class MainWindow
                         },
                         new TextBlock
                         {
-                            Text = req.RequestType == "Тренировка и манеж"
-                                ? $"{req.DurationMinutes} мин, {(req.HasTrainer ? "с тренером" : "без тренера")}"
-                                : "Запрос администратору",
+                            Text = req.RequestType switch
+                            {
+                                "Тренировка и манеж" => $"{req.DurationMinutes} мин, {(req.HasTrainer ? "с тренером" : "без тренера")}",
+                                "Запрос скидки" => "Присвоение уровня / льготы",
+                                _ => "Запрос администратору"
+                            },
                             FontSize = 11,
                             Foreground = _textMutedBrown
                         }
@@ -420,7 +440,9 @@ public partial class MainWindow
                 };
                 var cCost = new TextBlock
                 {
-                    Text = req.EstimatedCost > 0 ? ClubLogic.FormatMoney(req.EstimatedCost) : "По тарифу",
+                    Text = req.RequestType == "Запрос скидки"
+                        ? "Льгота"
+                        : req.EstimatedCost > 0 ? ClubLogic.FormatMoney(req.EstimatedCost) : "По тарифу",
                     FontSize = 12,
                     FontWeight = FontWeight.Bold,
                     Foreground = _textDarkBrown,
@@ -464,6 +486,7 @@ public partial class MainWindow
             PopulateRows();
         };
 
+        btnReqDiscount.Click += (_, _) => OpenDiscountRequestModal();
         btnNewReq.Click += (_, _) => OpenNewRequestModal();
 
         PopulateRows();
@@ -870,6 +893,33 @@ public partial class MainWindow
                 autoDetails = $" | Денник {stall.StallCode} забронирован автоматически";
             }
         }
+        else if (req.RequestType == "Запрос скидки")
+        {
+            var rider = Database.EnsureRiderExists(_data, req.RequesterName, out string riderErr);
+            if (!string.IsNullOrEmpty(riderErr))
+            {
+                ShowToast($"Ошибка БД: {riderErr}");
+                return;
+            }
+
+            string targetSkill = string.IsNullOrWhiteSpace(req.TargetName) ? "Любитель" : req.TargetName;
+            decimal newDiscount = ClubLogic.GetDiscountForSkill(targetSkill);
+            string? phone = string.IsNullOrWhiteSpace(req.EquipmentCode) ? null : req.EquipmentCode.Trim();
+
+            if (!Database.UpdateRiderDiscount(rider.Id, targetSkill, newDiscount, phone, out string updErr))
+            {
+                ShowToast($"Ошибка обновления скидки в БД: {updErr}");
+                return;
+            }
+
+            rider.SkillLevel = targetSkill;
+            rider.DiscountRate = newDiscount;
+            rider.MembershipName = ClubLogic.GetMembershipLabel(newDiscount);
+            if (!string.IsNullOrWhiteSpace(phone))
+                rider.Phone = phone;
+
+            autoDetails = $" | Присвоен уровень «{targetSkill}» (скидка {newDiscount:0}%)";
+        }
 
         if (!Database.UpdateClientRequestStatus(req.Id, "Одобрено", out string err))
         {
@@ -880,6 +930,109 @@ public partial class MainWindow
         req.Status = "Одобрено";
         ShowToast($"Заявка от {req.RequesterName} одобрена{autoDetails}");
         ShowClubPage();
+    }
+
+    private void OpenDiscountRequestModal()
+    {
+        var myRider = _data.FindRiderByName(_data.CurrentUser.FullName);
+        decimal currentDiscount = myRider?.DiscountRate ?? 0m;
+        string currentSkill = myRider?.SkillLevel ?? "Начинающий";
+
+        var box = new StackPanel { Spacing = 12 };
+        box.Children.Add(CreateModalHeader(
+            "Запрос скидки / льготного уровня",
+            $"Текущий статус: {currentSkill} (скидка {currentDiscount:0}%). После одобрения администратором скидка применится ко всем новым заявкам."));
+
+        var options = new[]
+        {
+            ("Любитель", "Любитель — скидка 5% (Клубный базовый)"),
+            ("Опытный всадник", "Опытный всадник — скидка 10%"),
+            ("Спортсмен (конкур)", "Спортсмен (конкур) — скидка 15%"),
+            ("Льготный / Безлимит", "Льготный / Безлимит — скидка 20% (студентам, многодетным, членам сборной)")
+        };
+
+        var levelCombo = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = options.Select(o => o.Item2).ToArray(),
+            SelectedIndex = 0
+        };
+        levelCombo.Classes.Add("compact");
+
+        var phoneInput = new TextBox
+        {
+            Text = myRider?.Phone ?? string.Empty,
+            PlaceholderText = "+7 (900) 000-00-00 (необязательно)"
+        };
+        phoneInput.Classes.Add("compact");
+
+        var reasonInput = new TextBox
+        {
+            PlaceholderText = "Укажите основание: спорт. разряд, стаж, социальная льгота..."
+        };
+        reasonInput.Classes.Add("compact");
+
+        var btnSend = new Button { Content = "Отправить запрос администратору" };
+        btnSend.Classes.Add("compact");
+        var btnCancel = new Button { Content = "Отмена" };
+        btnCancel.Classes.Add("secondary");
+        btnCancel.Click += (_, _) => CloseModal();
+
+        btnSend.Click += (_, _) =>
+        {
+            string reason = (reasonInput.Text ?? string.Empty).Trim();
+            if (reason.Length < 4)
+            {
+                ShowPopupError(reasonInput, "Укажите краткое основание для скидки / льготы");
+                return;
+            }
+
+            var chosen = options[Math.Clamp(levelCombo.SelectedIndex, 0, options.Length - 1)];
+            decimal discount = ClubLogic.GetDiscountForSkill(chosen.Item1);
+
+            var req = new ClientRequestItem
+            {
+                Id = _data.NextRequestId++,
+                UserId = _data.CurrentUser.Id,
+                RequesterName = _data.CurrentUser.FullName,
+                RequestType = "Запрос скидки",
+                TargetName = chosen.Item1,
+                HorseId = null,
+                ArenaZone = $"Скидка {discount:0}%",
+                DurationMinutes = 0,
+                HasTrainer = false,
+                RequestedDateTime = DateTime.Now,
+                EstimatedCost = 0m,
+                Comment = reason,
+                EquipmentCode = (phoneInput.Text ?? string.Empty).Trim(),
+                Status = "На рассмотрении",
+                CreatedAt = DateTime.Now
+            };
+
+            if (!Database.AddClientRequest(req, out string err))
+            {
+                ShowToast($"Ошибка БД: {err}");
+                return;
+            }
+
+            _data.Requests.Insert(0, req);
+            CloseModal();
+            ShowToast("Запрос на скидку отправлен администратору манежа");
+            ShowClubPage();
+        };
+
+        box.Children.Add(CreateFormField("Запрашиваемый уровень / льгота", levelCombo));
+        box.Children.Add(CreateFormField("Контактный телефон", phoneInput));
+        box.Children.Add(CreateFormField("Основание / комментарий", reasonInput));
+        box.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Children = { btnCancel, btnSend }
+        });
+
+        ShowModal(box);
     }
 
     private void OpenNewRequestModal(HorseItem? preselectedHorse = null)
@@ -1005,13 +1158,16 @@ public partial class MainWindow
             return freeEquip.ElementAtOrDefault(idx - 2)?.InventoryCode ?? string.Empty;
         }
 
+        decimal clientDiscount = _data.GetRiderDiscount(_data.CurrentUser.FullName);
+
         void RefreshCost()
         {
-            decimal trainingCost = ClubLogic.CalculateSessionCost(SelectedMinutes(), chkTrainer.IsChecked == true, 0m);
+            decimal trainingCost = ClubLogic.CalculateSessionCost(SelectedMinutes(), chkTrainer.IsChecked == true, clientDiscount);
             decimal eqCost = SelectedEquipmentCost();
+            string discTag = clientDiscount > 0 ? $" (скидка {clientDiscount:0}%)" : string.Empty;
             costPreview.Text = eqCost > 0
-                ? $"Предварительно: {ClubLogic.FormatMoney(trainingCost)} + снаряжение {ClubLogic.FormatMoney(eqCost)}"
-                : $"Предварительная стоимость: {ClubLogic.FormatMoney(trainingCost)}";
+                ? $"Предварительно{discTag}: {ClubLogic.FormatMoney(trainingCost)} + снаряжение {ClubLogic.FormatMoney(eqCost)}"
+                : $"Предварительная стоимость{discTag}: {ClubLogic.FormatMoney(trainingCost)}";
         }
 
         durationCombo.SelectionChanged += (_, _) => RefreshCost();
@@ -1048,7 +1204,7 @@ public partial class MainWindow
 
             int minutes = SelectedMinutes();
             bool hasTrainer = chkTrainer.IsChecked == true;
-            decimal cost = ClubLogic.CalculateSessionCost(minutes, hasTrainer, 0m);
+            decimal cost = ClubLogic.CalculateSessionCost(minutes, hasTrainer, clientDiscount);
             string eqCode = SelectedEquipmentCode();
             string baseComment = (commentInput.Text ?? string.Empty).Trim();
             if (!string.IsNullOrEmpty(eqCode) && string.IsNullOrEmpty(baseComment))
@@ -1516,7 +1672,7 @@ public partial class MainWindow
         Grid.SetRow(toolbar, 0);
         grid.Children.Add(toolbar);
 
-        const string cols = "165,1.25*,1.2*,85,105,165,220";
+        const string cols = "165,1.25*,1.2*,85,105,165,260";
         var header = CreateTableHeader(cols, new[]
         {
             ("N Документа", 0),
@@ -1738,6 +1894,19 @@ public partial class MainWindow
                 ToolTip.SetTip(btnSheet, "Маршрутный лист и акт проверки (SHA256)");
                 btnSheet.Click += (_, _) => OpenRouteSheetModal(order);
                 actions.Children.Add(btnSheet);
+
+                if (IsArenaAdmin && order.Status != ClubLogic.OrderStatuses.CancelledVet)
+                {
+                    var btnPen = new Button { Content = "Штраф" };
+                    btnPen.Classes.Add("table-danger");
+                    ToolTip.SetTip(btnPen, "Оформить штраф по тренировке (переработка, нарушение ТБ, порча)");
+                    btnPen.Click += (_, _) => OpenIssuePenaltyModal(
+                        "Администратор манежа",
+                        order.RiderName,
+                        $"{order.OrderNum} ({horseName})",
+                        "Задержка / переработка времени");
+                    actions.Children.Add(btnPen);
+                }
 
                 Grid.SetColumn(colDoc, 0);
                 Grid.SetColumn(colRider, 1);
@@ -2471,7 +2640,7 @@ public partial class MainWindow
         Grid.SetRow(toolbar, 0);
         grid.Children.Add(toolbar);
 
-        const string cols = "85,1.5*,100,95,1.3*,100,115,145";
+        const string cols = "85,1.5*,100,95,1.3*,100,115,195";
         var header = CreateTableHeader(cols, new[]
         {
             ("Инв. N", 0),
@@ -2615,6 +2784,7 @@ public partial class MainWindow
                 var actionPanel = new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
+                    Spacing = 6,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
@@ -2648,8 +2818,9 @@ public partial class MainWindow
                     }
                     else if (item.Status == "В аренде")
                     {
-                        var btnReturn = new Button { Content = "Принять возврат" };
+                        var btnReturn = new Button { Content = "Возврат" };
                         btnReturn.Classes.Add("table-secondary");
+                        ToolTip.SetTip(btnReturn, "Принять возврат на склад");
                         btnReturn.Click += (_, _) =>
                         {
                             item.Status = "Свободно";
@@ -2659,7 +2830,18 @@ public partial class MainWindow
                             ShowToast($"{item.InventoryCode}: снаряжение возвращено на склад");
                             ShowClubPage();
                         };
+
+                        var btnPenalty = new Button { Content = "Штраф" };
+                        btnPenalty.Classes.Add("table-danger");
+                        ToolTip.SetTip(btnPenalty, "Выписать штраф за порчу или просрочку возврата снаряжения");
+                        btnPenalty.Click += (_, _) => OpenIssuePenaltyModal(
+                            "Администратор манежа",
+                            item.RentedByRider,
+                            $"{item.InventoryCode} {item.Name}",
+                            "Порча снаряжения");
+
                         actionPanel.Children.Add(btnReturn);
+                        actionPanel.Children.Add(btnPenalty);
                     }
                     else
                     {
@@ -2884,7 +3066,7 @@ public partial class MainWindow
         ShowModal(box);
     }
 
-    // Вкладка всадников и клубных абонементов
+    // Вкладка всадников и скидок
 
     private Control BuildClubRidersTab()
     {
@@ -2902,7 +3084,7 @@ public partial class MainWindow
 
         var searchBox = new TextBox
         {
-            PlaceholderText = "Поиск всадника по ФИО, телефону или абонементу...",
+            PlaceholderText = "Поиск всадника по ФИО, телефону или уровню...",
             Text = _clubSearchQuery
         };
         searchBox.Classes.Add("compact");
@@ -2918,15 +3100,16 @@ public partial class MainWindow
         Grid.SetRow(toolbar, 0);
         grid.Children.Add(toolbar);
 
-        const string cols = "1.6*,145,145,1.25*,95,105";
+        const string cols = "1.45*,135,145,1.25*,85,105,115";
         var header = CreateTableHeader(cols, new[]
         {
             ("ФИО всадника", 0),
             ("Телефон", 1),
             ("Уровень подготовки", 2),
-            ("Клубный абонемент", 3),
+            ("Тарифный статус", 3),
             ("Скидка", 4),
-            ("Остаток", 5)
+            ("Тренировки", 5),
+            ("Действие", 6)
         }, darkStyle: false);
 
         Grid.SetRow(header, 1);
@@ -2950,7 +3133,8 @@ public partial class MainWindow
                 string.IsNullOrEmpty(q)
                 || r.FullName.Contains(q, StringComparison.OrdinalIgnoreCase)
                 || r.Phone.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || r.MembershipName.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+                || r.SkillLevel.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || ClubLogic.GetMembershipLabel(r.DiscountRate).Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
 
             if (filtered.Count == 0)
             {
@@ -2967,6 +3151,9 @@ public partial class MainWindow
             for (int idx = 0; idx < filtered.Count; idx++)
             {
                 var rider = filtered[idx];
+                int sessionCount = _data.GetRiderSessionCount(rider.Id, rider.FullName);
+                string tariffLabel = ClubLogic.GetMembershipLabel(rider.DiscountRate);
+
                 var rowGrid = new Grid
                 {
                     ColumnDefinitions = new ColumnDefinitions(cols),
@@ -2998,7 +3185,7 @@ public partial class MainWindow
                 };
                 var cMember = new TextBlock
                 {
-                    Text = rider.MembershipName,
+                    Text = tariffLabel,
                     FontSize = 12,
                     FontWeight = FontWeight.SemiBold,
                     Foreground = _textDarkBrown,
@@ -3008,13 +3195,25 @@ public partial class MainWindow
                     ? CreateBadge($"-{rider.DiscountRate:0}%", "#FFF3E0", "#E65100", "#FFCC80")
                     : CreateBadge("0%", "#F5F5F5", "#757575");
 
-                var cRem = new TextBlock
+                var cSessions = new TextBlock
                 {
-                    Text = rider.RemainingSessions,
+                    Text = $"{sessionCount} зан.",
                     FontSize = 12,
                     FontWeight = FontWeight.SemiBold,
                     Foreground = _textMediumBrown,
                     VerticalAlignment = VerticalAlignment.Center
+                };
+
+                var btnEdit = new Button { Content = "Уровень" };
+                btnEdit.Classes.Add("table-btn");
+                ToolTip.SetTip(btnEdit, "Изменить уровень подготовки и скидку клиента");
+                btnEdit.Click += (_, _) => OpenEditRiderDiscountModal(rider);
+
+                var cAction = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Children = { btnEdit }
                 };
 
                 Grid.SetColumn(cName, 0);
@@ -3022,14 +3221,16 @@ public partial class MainWindow
                 Grid.SetColumn(cSkill, 2);
                 Grid.SetColumn(cMember, 3);
                 Grid.SetColumn(cDisc, 4);
-                Grid.SetColumn(cRem, 5);
+                Grid.SetColumn(cSessions, 5);
+                Grid.SetColumn(cAction, 6);
 
                 rowGrid.Children.Add(cName);
                 rowGrid.Children.Add(cPhone);
                 rowGrid.Children.Add(cSkill);
                 rowGrid.Children.Add(cMember);
                 rowGrid.Children.Add(cDisc);
-                rowGrid.Children.Add(cRem);
+                rowGrid.Children.Add(cSessions);
+                rowGrid.Children.Add(cAction);
 
                 rowsHost.Children.Add(new Border
                 {
@@ -3056,7 +3257,7 @@ public partial class MainWindow
     private void OpenAddRiderModal()
     {
         var box = new StackPanel { Spacing = 12 };
-        box.Children.Add(CreateModalHeader("Новый всадник / абонемент", "Добавление клиента клуба"));
+        box.Children.Add(CreateModalHeader("Новый всадник", "Добавление клиента в базу и назначение скидки по уровню"));
 
         var txtName = new TextBox { PlaceholderText = "ФИО полностью" };
         txtName.Classes.Add("compact");
@@ -3064,21 +3265,22 @@ public partial class MainWindow
         var txtPhone = new TextBox { PlaceholderText = "+7 (900) 000-00-00" };
         txtPhone.Classes.Add("compact");
 
+        var skillOptions = new[]
+        {
+            ("Начинающий", "Начинающий (скидка 0%)"),
+            ("Любитель", "Любитель (скидка 5%)"),
+            ("Опытный всадник", "Опытный всадник (скидка 10%)"),
+            ("Спортсмен (конкур)", "Спортсмен (конкур) (скидка 15%)"),
+            ("Льготный / Безлимит", "Льготный / Безлимит (скидка 20%)")
+        };
+
         var skillCombo = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "Начинающий", "Любитель", "Опытный всадник", "Спортсмен (конкур)" },
+            ItemsSource = skillOptions.Select(s => s.Item2).ToArray(),
             SelectedIndex = 1
         };
         skillCombo.Classes.Add("compact");
-
-        var memberCombo = new ComboBox
-        {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = new[] { "Разовый визит (0%)", "Базовый 4 зан. (5%)", "Опытный 8 зан. (10%)", "Конкур PRO 12 зан. (15%)", "Клубный безлимит (20%)" },
-            SelectedIndex = 1
-        };
-        memberCombo.Classes.Add("compact");
 
         var btnSave = new Button { Content = "Сохранить всадника" };
         btnSave.Classes.Add("compact");
@@ -3094,24 +3296,18 @@ public partial class MainWindow
                 return;
             }
 
-            var (mName, disc, rem) = memberCombo.SelectedIndex switch
-            {
-                0 => ("Разовый визит", 0m, "-"),
-                1 => ("Базовый (4 зан.)", 5m, "4 зан."),
-                2 => ("Опытный (8 зан.)", 10m, "8 зан."),
-                3 => ("Конкур PRO (12 зан.)", 15m, "12 зан."),
-                _ => ("Клубный безлимит", 20m, "Безлимит")
-            };
+            string skill = skillOptions[Math.Clamp(skillCombo.SelectedIndex, 0, skillOptions.Length - 1)].Item1;
+            decimal disc = ClubLogic.GetDiscountForSkill(skill);
 
             var newRider = new ClubRider
             {
                 Id = _data.NextRiderId++,
                 FullName = txtName.Text.Trim(),
                 Phone = string.IsNullOrWhiteSpace(txtPhone.Text) ? "+7 (900) 000-00-00" : txtPhone.Text.Trim(),
-                SkillLevel = skillCombo.SelectedItem?.ToString() ?? "Любитель",
+                SkillLevel = skill,
                 DiscountRate = disc,
-                MembershipName = mName,
-                RemainingSessions = rem
+                MembershipName = ClubLogic.GetMembershipLabel(disc),
+                RemainingSessions = "0 зан."
             };
 
             if (!Database.AddRider(newRider, out string dbErr))
@@ -3122,14 +3318,13 @@ public partial class MainWindow
 
             _data.Riders.Add(newRider);
             CloseModal();
-            ShowToast($"Добавлен всадник {newRider.FullName}");
+            ShowToast($"Добавлен всадник {newRider.FullName} ({skill}, скидка {disc:0}%)");
             ShowClubPage();
         };
 
         box.Children.Add(CreateFormField("ФИО всадника", txtName));
         box.Children.Add(CreateFormField("Телефон", txtPhone));
-        box.Children.Add(CreateFormField("Уровень подготовки", skillCombo));
-        box.Children.Add(CreateFormField("Абонемент и скидка", memberCombo));
+        box.Children.Add(CreateFormField("Уровень подготовки и скидка", skillCombo));
         box.Children.Add(new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -3140,6 +3335,742 @@ public partial class MainWindow
 
         ShowModal(box);
     }
+
+    private void OpenEditRiderDiscountModal(ClubRider rider)
+    {
+        var box = new StackPanel { Spacing = 12 };
+        box.Children.Add(CreateModalHeader(
+            $"Уровень и скидка: {rider.FullName}",
+            $"Текущий статус: {rider.SkillLevel} (скидка {rider.DiscountRate:0}%)"));
+
+        var skillOptions = new[]
+        {
+            ("Начинающий", "Начинающий (скидка 0%)"),
+            ("Любитель", "Любитель (скидка 5%)"),
+            ("Опытный всадник", "Опытный всадник (скидка 10%)"),
+            ("Спортсмен (конкур)", "Спортсмен (конкур) (скидка 15%)"),
+            ("Льготный / Безлимит", "Льготный / Безлимит (скидка 20%)")
+        };
+
+        int curIdx = Array.FindIndex(skillOptions, o => o.Item1.Equals(rider.SkillLevel, StringComparison.OrdinalIgnoreCase));
+        if (curIdx < 0) curIdx = 1;
+
+        var skillCombo = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = skillOptions.Select(s => s.Item2).ToArray(),
+            SelectedIndex = curIdx
+        };
+        skillCombo.Classes.Add("compact");
+
+        var txtPhone = new TextBox
+        {
+            Text = rider.Phone,
+            PlaceholderText = "+7 (900) 000-00-00"
+        };
+        txtPhone.Classes.Add("compact");
+
+        var btnSave = new Button { Content = "Сохранить" };
+        btnSave.Classes.Add("compact");
+        var btnCancel = new Button { Content = "Отмена" };
+        btnCancel.Classes.Add("secondary");
+        btnCancel.Click += (_, _) => CloseModal();
+
+        btnSave.Click += (_, _) =>
+        {
+            string skill = skillOptions[Math.Clamp(skillCombo.SelectedIndex, 0, skillOptions.Length - 1)].Item1;
+            decimal disc = ClubLogic.GetDiscountForSkill(skill);
+            string phone = string.IsNullOrWhiteSpace(txtPhone.Text) ? rider.Phone : txtPhone.Text.Trim();
+
+            if (!Database.UpdateRiderDiscount(rider.Id, skill, disc, phone, out string err))
+            {
+                ShowToast($"Ошибка БД: {err}");
+                return;
+            }
+
+            rider.SkillLevel = skill;
+            rider.DiscountRate = disc;
+            rider.MembershipName = ClubLogic.GetMembershipLabel(disc);
+            rider.Phone = phone;
+
+            CloseModal();
+            ShowToast($"{rider.FullName}: обновлен уровень «{skill}» (-{disc:0}%)");
+            ShowClubPage();
+        };
+
+        box.Children.Add(CreateFormField("Уровень / тариф", skillCombo));
+        box.Children.Add(CreateFormField("Телефон", txtPhone));
+        box.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Children = { btnCancel, btnSave }
+        });
+
+        ShowModal(box);
+    }
+
+    // Вкладка штрафов и нарушений (Администратор манежа)
+
+    private Control BuildAdminPenaltiesTab()
+    {
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,Auto,*"),
+            RowSpacing = 10
+        };
+
+        var toolbar = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            ColumnSpacing = 10
+        };
+
+        var searchBox = new TextBox
+        {
+            PlaceholderText = "Поиск штрафа по клиенту, причине, объекту или автору...",
+            Text = _clubSearchQuery
+        };
+        searchBox.Classes.Add("compact");
+
+        var filterCombo = new ComboBox
+        {
+            Width = 175,
+            ItemsSource = new[] { "Все", "Не оплачен", "Оплачен", "Списан" },
+            SelectedItem = _penaltyStatusFilter
+        };
+        filterCombo.Classes.Add("compact");
+
+        var btnIssue = new Button { Content = "+ Выписать штраф" };
+        btnIssue.Classes.Add("compact");
+        btnIssue.Click += (_, _) => OpenIssuePenaltyModal("Администратор манежа");
+
+        Grid.SetColumn(searchBox, 0);
+        Grid.SetColumn(filterCombo, 1);
+        Grid.SetColumn(btnIssue, 2);
+        toolbar.Children.Add(searchBox);
+        toolbar.Children.Add(filterCombo);
+        toolbar.Children.Add(btnIssue);
+
+        Grid.SetRow(toolbar, 0);
+        grid.Children.Add(toolbar);
+
+        const string cols = "105,1.25*,1.15*,1.45*,1.05*,90,115,180";
+        var header = CreateTableHeader(cols, new[]
+        {
+            ("Дата", 0),
+            ("Всадник / Клиент", 1),
+            ("Категория и объект", 2),
+            ("Причина нарушения", 3),
+            ("Выписал", 4),
+            ("Сумма", 5),
+            ("Статус", 6),
+            ("Действия", 7)
+        }, darkStyle: false);
+
+        Grid.SetRow(header, 1);
+        grid.Children.Add(header);
+
+        var rowsHost = new StackPanel { Spacing = 0 };
+        var scroller = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = rowsHost
+        };
+        Grid.SetRow(scroller, 2);
+        grid.Children.Add(scroller);
+
+        void PopulateRows()
+        {
+            rowsHost.Children.Clear();
+            string q = _clubSearchQuery.Trim();
+
+            var filtered = _data.Penalties.Where(p =>
+            {
+                if (_penaltyStatusFilter != "Все" && p.Status != _penaltyStatusFilter)
+                    return false;
+                if (string.IsNullOrEmpty(q))
+                    return true;
+                return p.RiderName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || p.Category.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || p.Reason.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || p.TargetObject.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || p.IssuedByName.Contains(q, StringComparison.OrdinalIgnoreCase);
+            })
+            .OrderBy(p => p.Status == "Не оплачен" ? 0 : 1)
+            .ThenByDescending(p => p.CreatedAt)
+            .ToList();
+
+            if (filtered.Count == 0)
+            {
+                rowsHost.Children.Add(new TextBlock
+                {
+                    Text = "Штрафов по выбранному фильтру не найдено.",
+                    Foreground = _textMutedBrown,
+                    FontSize = 13,
+                    Margin = new Thickness(14, 20)
+                });
+                return;
+            }
+
+            for (int idx = 0; idx < filtered.Count; idx++)
+            {
+                var p = filtered[idx];
+                var rowGrid = new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions(cols),
+                    ColumnSpacing = 8,
+                    Margin = new Thickness(14, 10)
+                };
+
+                var cDate = new TextBlock
+                {
+                    Text = p.CreatedAt.ToString("dd.MM.yyyy"),
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cRider = new TextBlock
+                {
+                    Text = p.RiderName,
+                    FontSize = 13,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cCat = new StackPanel
+                {
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Spacing = 2,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = p.Category,
+                            FontSize = 12,
+                            FontWeight = FontWeight.SemiBold,
+                            Foreground = _textMediumBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        },
+                        new TextBlock
+                        {
+                            Text = p.TargetObject,
+                            FontSize = 11,
+                            Foreground = _textMutedBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        }
+                    }
+                };
+                var cReason = new TextBlock
+                {
+                    Text = p.Reason,
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cIssuer = new StackPanel
+                {
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Spacing = 1,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = p.IssuedByName,
+                            FontSize = 11.5,
+                            FontWeight = FontWeight.SemiBold,
+                            Foreground = _textDarkBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        },
+                        new TextBlock
+                        {
+                            Text = p.IssuerRole == "Главный берейтор-зоотехник" ? "Зоотехник" : "Админ манежа",
+                            FontSize = 10.5,
+                            Foreground = _textMutedBrown
+                        }
+                    }
+                };
+                var cAmount = new TextBlock
+                {
+                    Text = ClubLogic.FormatMoney(p.Amount),
+                    FontSize = 12.5,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = p.Status == "Не оплачен" ? Brush.Parse("#9F1239") : _textDarkBrown,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cStatus = CreatePenaltyStatusBadge(p.Status);
+
+                var actionPanel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 5,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                if (p.Status == "Не оплачен")
+                {
+                    var btnPay = new Button { Content = "Оплачен" };
+                    btnPay.Classes.Add("table-success");
+                    btnPay.Click += (_, _) =>
+                    {
+                        if (!Database.UpdatePenaltyStatus(p.Id, "Оплачен", out string err))
+                        {
+                            ShowToast($"Ошибка БД: {err}");
+                            return;
+                        }
+                        p.Status = "Оплачен";
+                        ShowToast($"Штраф #{p.Id} отмечен как оплаченный");
+                        ShowClubPage();
+                    };
+
+                    var btnWaive = new Button { Content = "Списать" };
+                    btnWaive.Classes.Add("table-secondary");
+                    btnWaive.Click += (_, _) =>
+                    {
+                        if (!Database.UpdatePenaltyStatus(p.Id, "Списан", out string err))
+                        {
+                            ShowToast($"Ошибка БД: {err}");
+                            return;
+                        }
+                        p.Status = "Списан";
+                        ShowToast($"Штраф #{p.Id} списан");
+                        ShowClubPage();
+                    };
+
+                    actionPanel.Children.Add(btnPay);
+                    actionPanel.Children.Add(btnWaive);
+                }
+                else
+                {
+                    actionPanel.Children.Add(new TextBlock
+                    {
+                        Text = "Закрыт",
+                        FontSize = 11,
+                        Foreground = _textMutedBrown
+                    });
+                }
+
+                Grid.SetColumn(cDate, 0);
+                Grid.SetColumn(cRider, 1);
+                Grid.SetColumn(cCat, 2);
+                Grid.SetColumn(cReason, 3);
+                Grid.SetColumn(cIssuer, 4);
+                Grid.SetColumn(cAmount, 5);
+                Grid.SetColumn(cStatus, 6);
+                Grid.SetColumn(actionPanel, 7);
+
+                rowGrid.Children.Add(cDate);
+                rowGrid.Children.Add(cRider);
+                rowGrid.Children.Add(cCat);
+                rowGrid.Children.Add(cReason);
+                rowGrid.Children.Add(cIssuer);
+                rowGrid.Children.Add(cAmount);
+                rowGrid.Children.Add(cStatus);
+                rowGrid.Children.Add(actionPanel);
+
+                rowsHost.Children.Add(new Border
+                {
+                    Background = idx % 2 == 0 ? Brushes.White : Brush.Parse("#FAF7F4"),
+                    BorderBrush = Brush.Parse("#EFE7DE"),
+                    BorderThickness = new Thickness(0, 0, 0, 1),
+                    Child = rowGrid
+                });
+            }
+        }
+
+        searchBox.TextChanged += (_, _) =>
+        {
+            _clubSearchQuery = searchBox.Text ?? string.Empty;
+            PopulateRows();
+        };
+
+        filterCombo.SelectionChanged += (_, _) =>
+        {
+            _penaltyStatusFilter = filterCombo.SelectedItem?.ToString() ?? "Все";
+            PopulateRows();
+        };
+
+        PopulateRows();
+        return grid;
+    }
+
+    // Вкладка штрафов (Клиент, только чтение)
+
+    private Control BuildClientPenaltiesTab()
+    {
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,Auto,*"),
+            RowSpacing = 10
+        };
+
+        var myPenalties = _data.Penalties
+            .Where(p => p.RiderName.Equals(_data.CurrentUser.FullName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        decimal unpaidSum = myPenalties.Where(p => p.Status == "Не оплачен").Sum(p => p.Amount);
+
+        var toolbar = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            ColumnSpacing = 10
+        };
+
+        var summaryBanner = new Border
+        {
+            Background = unpaidSum > 0 ? Brush.Parse("#FFF1F2") : Brush.Parse("#E8F5E9"),
+            BorderBrush = unpaidSum > 0 ? Brush.Parse("#FECDD3") : Brush.Parse("#A5D6A7"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12, 8),
+            Child = new TextBlock
+            {
+                Text = unpaidSum > 0
+                    ? $"Итого неоплаченных штрафов: {ClubLogic.FormatMoney(unpaidSum)} (оплата оформляется у администратора манежа)"
+                    : "Неоплаченных штрафов нет — нарушений не зафиксировано",
+                FontSize = 12.5,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = unpaidSum > 0 ? Brush.Parse("#9F1239") : Brush.Parse("#2E7D32"),
+                VerticalAlignment = VerticalAlignment.Center
+            }
+        };
+
+        var filterCombo = new ComboBox
+        {
+            Width = 175,
+            ItemsSource = new[] { "Все", "Не оплачен", "Оплачен", "Списан" },
+            SelectedItem = _penaltyStatusFilter
+        };
+        filterCombo.Classes.Add("compact");
+
+        Grid.SetColumn(summaryBanner, 0);
+        Grid.SetColumn(filterCombo, 2);
+        toolbar.Children.Add(summaryBanner);
+        toolbar.Children.Add(filterCombo);
+
+        Grid.SetRow(toolbar, 0);
+        grid.Children.Add(toolbar);
+
+        const string cols = "105,1.25*,1.15*,1.65*,1.1*,100,120";
+        var header = CreateTableHeader(cols, new[]
+        {
+            ("Дата", 0),
+            ("Категория", 1),
+            ("Объект", 2),
+            ("Причина", 3),
+            ("Кто выписал", 4),
+            ("Сумма", 5),
+            ("Статус", 6)
+        }, darkStyle: false);
+
+        Grid.SetRow(header, 1);
+        grid.Children.Add(header);
+
+        var rowsHost = new StackPanel { Spacing = 0 };
+        var scroller = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = rowsHost
+        };
+        Grid.SetRow(scroller, 2);
+        grid.Children.Add(scroller);
+
+        void PopulateRows()
+        {
+            rowsHost.Children.Clear();
+
+            var filtered = myPenalties
+                .Where(p => _penaltyStatusFilter == "Все" || p.Status == _penaltyStatusFilter)
+                .OrderBy(p => p.Status == "Не оплачен" ? 0 : 1)
+                .ThenByDescending(p => p.CreatedAt)
+                .ToList();
+
+            if (filtered.Count == 0)
+            {
+                rowsHost.Children.Add(new TextBlock
+                {
+                    Text = "У вас нет зафиксированных штрафов.",
+                    Foreground = _textMutedBrown,
+                    FontSize = 13,
+                    Margin = new Thickness(14, 20)
+                });
+                return;
+            }
+
+            for (int idx = 0; idx < filtered.Count; idx++)
+            {
+                var p = filtered[idx];
+                var rowGrid = new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions(cols),
+                    ColumnSpacing = 8,
+                    Margin = new Thickness(14, 10)
+                };
+
+                var cDate = new TextBlock
+                {
+                    Text = p.CreatedAt.ToString("dd.MM.yyyy"),
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cCat = new TextBlock
+                {
+                    Text = p.Category,
+                    FontSize = 12,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cTarget = new TextBlock
+                {
+                    Text = p.TargetObject,
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cReason = new TextBlock
+                {
+                    Text = p.Reason,
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cIssuer = new TextBlock
+                {
+                    Text = $"{p.IssuedByName}\n({(p.IssuerRole == "Главный берейтор-зоотехник" ? "Зоотехник" : "Администратор")})",
+                    FontSize = 11.5,
+                    Foreground = _textMutedBrown,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cAmount = new TextBlock
+                {
+                    Text = ClubLogic.FormatMoney(p.Amount),
+                    FontSize = 12.5,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = p.Status == "Не оплачен" ? Brush.Parse("#9F1239") : _textDarkBrown,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cStatus = CreatePenaltyStatusBadge(p.Status);
+
+                Grid.SetColumn(cDate, 0);
+                Grid.SetColumn(cCat, 1);
+                Grid.SetColumn(cTarget, 2);
+                Grid.SetColumn(cReason, 3);
+                Grid.SetColumn(cIssuer, 4);
+                Grid.SetColumn(cAmount, 5);
+                Grid.SetColumn(cStatus, 6);
+
+                rowGrid.Children.Add(cDate);
+                rowGrid.Children.Add(cCat);
+                rowGrid.Children.Add(cTarget);
+                rowGrid.Children.Add(cReason);
+                rowGrid.Children.Add(cIssuer);
+                rowGrid.Children.Add(cAmount);
+                rowGrid.Children.Add(cStatus);
+
+                rowsHost.Children.Add(new Border
+                {
+                    Background = idx % 2 == 0 ? Brushes.White : Brush.Parse("#FAF7F4"),
+                    BorderBrush = Brush.Parse("#EFE7DE"),
+                    BorderThickness = new Thickness(0, 0, 0, 1),
+                    Child = rowGrid
+                });
+            }
+        }
+
+        filterCombo.SelectionChanged += (_, _) =>
+        {
+            _penaltyStatusFilter = filterCombo.SelectedItem?.ToString() ?? "Все";
+            PopulateRows();
+        };
+
+        PopulateRows();
+        return grid;
+    }
+
+    private void OpenIssuePenaltyModal(
+        string issuerRole,
+        string? defaultRiderName = null,
+        string? defaultTarget = null,
+        string? defaultCategory = null)
+    {
+        bool isZootechPenalty = issuerRole == "Главный берейтор-зоотехник";
+
+        var box = new StackPanel { Spacing = 12 };
+        box.Children.Add(CreateModalHeader(
+            isZootechPenalty ? "Оформление штрафа (конюшня / лошади)" : "Оформление штрафа (манеж / снаряжение)",
+            isZootechPenalty
+                ? "Нарушения в конюшне, кормлении, содержании или несоблюдение ветеринарных правил"
+                : "Порча арендованного снаряжения, переработка времени тренировки и нарушения ТБ в манеже"));
+
+        var riderNames = _data.Riders.Select(r => r.FullName).Distinct().OrderBy(n => n).ToList();
+        if (!string.IsNullOrWhiteSpace(defaultRiderName) && !riderNames.Contains(defaultRiderName))
+            riderNames.Insert(0, defaultRiderName);
+
+        int selectedRiderIdx = 0;
+        if (!string.IsNullOrWhiteSpace(defaultRiderName))
+        {
+            int found = riderNames.FindIndex(n => n.Equals(defaultRiderName, StringComparison.OrdinalIgnoreCase));
+            if (found >= 0) selectedRiderIdx = found;
+        }
+
+        var riderCombo = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = riderNames,
+            SelectedIndex = riderNames.Count > 0 ? selectedRiderIdx : -1
+        };
+        riderCombo.Classes.Add("compact");
+
+        string[] categories = isZootechPenalty
+            ? new[]
+            {
+                "Нарушение правил конюшни",
+                "Травма / перегрузка лошади",
+                "Самовольное кормление / денник",
+                "Несоблюдение ветеринарных правил"
+            }
+            : new[]
+            {
+                "Порча снаряжения",
+                "Задержка / переработка времени",
+                "Нарушение ТБ в манеже",
+                "Порча инвентаря манежа / препятствий"
+            };
+
+        int catIdx = 0;
+        if (!string.IsNullOrWhiteSpace(defaultCategory))
+        {
+            int foundCat = Array.FindIndex(categories, c => c.Equals(defaultCategory, StringComparison.OrdinalIgnoreCase));
+            if (foundCat >= 0) catIdx = foundCat;
+        }
+
+        var catCombo = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = categories,
+            SelectedIndex = catIdx
+        };
+        catCombo.Classes.Add("compact");
+
+        var txtTarget = new TextBox
+        {
+            Text = defaultTarget ?? string.Empty,
+            PlaceholderText = isZootechPenalty
+                ? "Кличка лошади или код денника (например: Буран Д-01)"
+                : "Инв. N снаряжения или N заказа (например: EQ-004)"
+        };
+        txtTarget.Classes.Add("compact");
+
+        var txtAmount = new TextBox
+        {
+            Text = isZootechPenalty ? "2000" : "1500",
+            PlaceholderText = "Сумма штрафа в рублях"
+        };
+        txtAmount.Classes.Add("compact");
+
+        var txtReason = new TextBox
+        {
+            PlaceholderText = "Подробное описание нарушения..."
+        };
+        txtReason.Classes.Add("compact");
+
+        var btnSave = new Button { Content = "Выписать штраф" };
+        btnSave.Classes.Add("compact");
+        var btnCancel = new Button { Content = "Отмена" };
+        btnCancel.Classes.Add("secondary");
+        btnCancel.Click += (_, _) => CloseModal();
+
+        btnSave.Click += (_, _) =>
+        {
+            string riderName = riderCombo.SelectedItem?.ToString() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(riderName))
+            {
+                ShowPopupError(riderCombo, "Выберите клиента");
+                return;
+            }
+
+            if (!decimal.TryParse(txtAmount.Text?.Replace(" ", string.Empty), out decimal amount) || amount <= 0)
+            {
+                ShowPopupError(txtAmount, "Укажите корректную сумму больше 0");
+                return;
+            }
+
+            string reason = (txtReason.Text ?? string.Empty).Trim();
+            if (reason.Length < 5)
+            {
+                ShowPopupError(txtReason, "Опишите причину нарушения (минимум 5 символов)");
+                return;
+            }
+
+            var penalty = new PenaltyItem
+            {
+                Id = _data.NextPenaltyId++,
+                RiderName = riderName,
+                IssuedByName = _data.CurrentUser.FullName,
+                IssuerRole = issuerRole,
+                Category = catCombo.SelectedItem?.ToString() ?? categories[0],
+                Reason = reason,
+                TargetObject = string.IsNullOrWhiteSpace(txtTarget.Text) ? "-" : txtTarget.Text.Trim(),
+                Amount = amount,
+                Status = "Не оплачен",
+                CreatedAt = DateTime.Now
+            };
+
+            if (!Database.AddPenalty(penalty, out string err))
+            {
+                ShowToast($"Ошибка БД: {err}");
+                return;
+            }
+
+            _data.Penalties.Insert(0, penalty);
+            CloseModal();
+            ShowToast($"Штраф для {riderName} на {ClubLogic.FormatMoney(amount)} оформлен");
+            if (_currentSection == 1)
+                ShowHippodromePage();
+            else
+                ShowClubPage();
+        };
+
+        var row = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,160"),
+            ColumnSpacing = 12
+        };
+        var fTarget = CreateFormField("Объект (лошадь / инвентарь / заказ)", txtTarget);
+        var fAmount = CreateFormField("Сумма (руб.)", txtAmount);
+        Grid.SetColumn(fTarget, 0);
+        Grid.SetColumn(fAmount, 1);
+        row.Children.Add(fTarget);
+        row.Children.Add(fAmount);
+
+        box.Children.Add(CreateFormField("Всадник / Клиент", riderCombo));
+        box.Children.Add(CreateFormField("Категория нарушения", catCombo));
+        box.Children.Add(row);
+        box.Children.Add(CreateFormField("Причина нарушения", txtReason));
+        box.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Children = { btnCancel, btnSave }
+        });
+
+        ShowModal(box);
+    }
+
+    private static Border CreatePenaltyStatusBadge(string status) => status switch
+    {
+        "Оплачен" => CreateBadge(status, "#E8F5E9", "#2E7D32", "#A5D6A7"),
+        "Списан" => CreateBadge(status, "#EFEBE9", "#5D4037", "#BCAAA4"),
+        _ => CreateBadge(status, "#FFF1F2", "#9F1239", "#FECDD3")
+    };
 
     private static Border CreateRequestStatusBadge(string status) => status switch
     {

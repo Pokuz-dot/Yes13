@@ -135,8 +135,28 @@ public static class Database
               CONSTRAINT fk_rations_horse FOREIGN KEY (horse_id) REFERENCES horses (id) ON DELETE CASCADE ON UPDATE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
 
-        using var ratCmd = new MySqlCommand(rationsTableSql, conn);
-        ratCmd.ExecuteNonQuery();
+        using (var ratCmd = new MySqlCommand(rationsTableSql, conn))
+        {
+            ratCmd.ExecuteNonQuery();
+        }
+
+        const string penaltiesTableSql = @"
+            CREATE TABLE IF NOT EXISTS penalties (
+              id int(11) NOT NULL AUTO_INCREMENT,
+              rider_name varchar(150) NOT NULL,
+              issued_by_name varchar(150) NOT NULL,
+              issuer_role varchar(60) NOT NULL,
+              category varchar(60) NOT NULL,
+              reason varchar(255) NOT NULL,
+              target_object varchar(150) NOT NULL DEFAULT '-',
+              amount decimal(10,2) NOT NULL DEFAULT 0.00,
+              status varchar(40) NOT NULL DEFAULT 'Не оплачен',
+              created_at datetime NOT NULL DEFAULT current_timestamp(),
+              PRIMARY KEY (id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
+
+        using var penCmd = new MySqlCommand(penaltiesTableSql, conn);
+        penCmd.ExecuteNonQuery();
     }
 
     public static UserProfile? Login(string login, string password, out bool dbAvailable, out string error)
@@ -392,8 +412,8 @@ public static class Database
                         Phone = reader["phone"]?.ToString() ?? string.Empty,
                         SkillLevel = reader["skill_level"] == DBNull.Value ? "Любитель" : reader["skill_level"]?.ToString() ?? "Любитель",
                         DiscountRate = discount,
-                        MembershipName = GetMembershipLabel(discount),
-                        RemainingSessions = discount >= 20m ? "Безлимит" : discount > 0m ? "По абонементу" : "-"
+                        MembershipName = ClubLogic.GetMembershipLabel(discount),
+                        RemainingSessions = "0 зан."
                     });
                 }
             }
@@ -610,6 +630,40 @@ public static class Database
                 data.Rations.Clear();
                 data.Rations.AddRange(rations);
             }
+
+            // 11. Штрафы
+            var penalties = new List<PenaltyItem>();
+            const string penSql = @"
+                SELECT id, rider_name, issued_by_name, issuer_role, category, reason, target_object, amount, status, created_at
+                FROM penalties
+                ORDER BY id DESC;";
+
+            using (var cmd = new MySqlCommand(penSql, conn))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    penalties.Add(new PenaltyItem
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        RiderName = reader["rider_name"]?.ToString() ?? string.Empty,
+                        IssuedByName = reader["issued_by_name"]?.ToString() ?? string.Empty,
+                        IssuerRole = reader["issuer_role"]?.ToString() ?? string.Empty,
+                        Category = reader["category"]?.ToString() ?? string.Empty,
+                        Reason = reader["reason"]?.ToString() ?? string.Empty,
+                        TargetObject = reader["target_object"]?.ToString() ?? "-",
+                        Amount = Convert.ToDecimal(reader["amount"]),
+                        Status = reader["status"]?.ToString() ?? "Не оплачен",
+                        CreatedAt = Convert.ToDateTime(reader["created_at"])
+                    });
+                }
+            }
+            data.Penalties.Clear();
+            data.Penalties.AddRange(penalties);
+            data.NextPenaltyId = penalties.Count > 0 ? penalties.Max(p => p.Id) + 1 : 1;
+
+            foreach (var r in data.Riders)
+                r.RemainingSessions = $"{data.GetRiderSessionCount(r.Id, r.FullName)} зан.";
 
             SyncAuxiliaryTables(data);
             return true;
@@ -1133,13 +1187,95 @@ public static class Database
         }
     }
 
-    private static string GetMembershipLabel(decimal discount)
+    public static bool UpdateRiderDiscount(int riderId, string skillLevel, decimal discountRate, string? phone, out string error)
     {
-        if (discount >= 20m) return "Клубный безлимит";
-        if (discount >= 15m) return "Конкур PRO (12 зан.)";
-        if (discount >= 10m) return "Опытный (8 зан.)";
-        if (discount >= 5m) return "Базовый (4 зан.)";
-        return "Разовый визит";
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = @"
+                UPDATE club_riders
+                SET skill_level = @skill, discount_rate = @discount, phone = COALESCE(NULLIF(@phone, ''), phone)
+                WHERE id = @id;";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@skill", skillLevel);
+            cmd.Parameters.AddWithValue("@discount", discountRate);
+            cmd.Parameters.AddWithValue("@phone", string.IsNullOrWhiteSpace(phone) ? string.Empty : phone.Trim());
+            cmd.Parameters.AddWithValue("@id", riderId);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool AddPenalty(PenaltyItem penalty, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = @"
+                INSERT INTO penalties (rider_name, issued_by_name, issuer_role, category, reason, target_object, amount, status)
+                VALUES (@rname, @iname, @irole, @cat, @reason, @target, @amount, @status);";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@rname", penalty.RiderName);
+            cmd.Parameters.AddWithValue("@iname", penalty.IssuedByName);
+            cmd.Parameters.AddWithValue("@irole", penalty.IssuerRole);
+            cmd.Parameters.AddWithValue("@cat", penalty.Category);
+            cmd.Parameters.AddWithValue("@reason", penalty.Reason);
+            cmd.Parameters.AddWithValue("@target", penalty.TargetObject);
+            cmd.Parameters.AddWithValue("@amount", penalty.Amount);
+            cmd.Parameters.AddWithValue("@status", penalty.Status);
+            cmd.ExecuteNonQuery();
+            penalty.Id = (int)cmd.LastInsertedId;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool UpdatePenaltyStatus(int penaltyId, string status, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = "UPDATE penalties SET status = @status WHERE id = @id;";
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@status", status);
+            cmd.Parameters.AddWithValue("@id", penaltyId);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
     }
 
     private static void SyncAuxiliaryTables(MockClubData data)

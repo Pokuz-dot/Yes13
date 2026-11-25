@@ -190,6 +190,20 @@ public class ManagedUserItem
     public string OfflinePasswordHash { get; set; } = string.Empty;
 }
 
+public class PenaltyItem
+{
+    public int Id { get; set; }
+    public string RiderName { get; set; } = string.Empty;
+    public string IssuedByName { get; set; } = string.Empty;
+    public string IssuerRole { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public string TargetObject { get; set; } = "-";
+    public decimal Amount { get; set; }
+    public string Status { get; set; } = "Не оплачен";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
 // Расчет стоимости, переходы статусов и экспорт
 
 public static class ClubLogic
@@ -389,6 +403,24 @@ public static class ClubLogic
         }
         return released;
     }
+
+    public static decimal GetDiscountForSkill(string skillLevel) => skillLevel switch
+    {
+        "Любитель" => 5m,
+        "Опытный всадник" => 10m,
+        "Спортсмен (конкур)" => 15m,
+        "Льготный / Безлимит" => 20m,
+        _ => 0m
+    };
+
+    public static string GetMembershipLabel(decimal discount)
+    {
+        if (discount >= 20m) return "Льготный / Безлимит";
+        if (discount >= 15m) return "Спортсмен (конкур)";
+        if (discount >= 10m) return "Опытный всадник";
+        if (discount >= 5m) return "Клубный базовый";
+        return "Разовый визит";
+    }
 }
 
 // Стартовые данные в памяти (позже заменятся на запросы в MySQL)
@@ -410,19 +442,19 @@ public class MockClubData
         {
             Id = 1,
             Name = "Главный берейтор-зоотехник",
-            PermissionsSummary = "Рационы кормления, ветеринарные допуски, бронирование денников"
+            PermissionsSummary = "Рационы кормления, ветеринарные допуски, бронирование денников, штрафы по лошадям"
         },
         new RoleItem
         {
             Id = 2,
             Name = "Администратор манежа",
-            PermissionsSummary = "Запись всадников на занятия, аренда снаряжения (седла, шлемы), одобрение заявок и роли"
+            PermissionsSummary = "Запись всадников, аренда снаряжения, скидки, штрафы, одобрение заявок и роли"
         },
         new RoleItem
         {
             Id = 3,
             Name = "Клиент",
-            PermissionsSummary = "Отправка заявок на тренировку, коня, аренду манежа, снаряжения и постоя"
+            PermissionsSummary = "Заявки на тренировку, коня, аренду, постой, запрос скидки и просмотр штрафов"
         }
     };
 
@@ -442,12 +474,14 @@ public class MockClubData
     public List<FeedingRationItem> Rations { get; }
     public List<ClientRequestItem> Requests { get; }
     public List<ManagedUserItem> Users { get; }
+    public List<PenaltyItem> Penalties { get; }
 
     public int NextOrderSequence { get; set; } = 6;
-    public int NextRiderId { get; set; } = 6;
+    public int NextRiderId { get; set; } = 7;
     public int NextHorseId { get; set; } = 7;
     public int NextEquipmentId { get; set; } = 9;
-    public int NextRequestId { get; set; } = 3;
+    public int NextRequestId { get; set; } = 4;
+    public int NextPenaltyId { get; set; } = 4;
 
     public MockClubData()
     {
@@ -463,11 +497,12 @@ public class MockClubData
 
         Riders = new List<ClubRider>
         {
-            new() { Id = 1, FullName = "Соколов Дмитрий Андреевич", Phone = "+7 (903) 412-55-10", SkillLevel = "Спортсмен (конкур)", DiscountRate = 15m, MembershipName = "Конкур PRO (12 зан.)", RemainingSessions = "7 зан." },
-            new() { Id = 2, FullName = "Волкова Мария Игоревна", Phone = "+7 (916) 784-19-22", SkillLevel = "Опытный всадник", DiscountRate = 10m, MembershipName = "Базовый (8 зан.)", RemainingSessions = "5 зан." },
-            new() { Id = 3, FullName = "Кузнецов Артём Олегович", Phone = "+7 (925) 330-81-04", SkillLevel = "Начинающий", DiscountRate = 0m, MembershipName = "Разовый визит", RemainingSessions = "-" },
-            new() { Id = 4, FullName = "Лебедева Екатерина Павловна", Phone = "+7 (905) 619-40-77", SkillLevel = "Опытный всадник", DiscountRate = 20m, MembershipName = "Клубный безлимит", RemainingSessions = "Безлимит" },
-            new() { Id = 5, FullName = "Морозов Илья Викторович", Phone = "+7 (985) 207-93-18", SkillLevel = "Любитель", DiscountRate = 5m, MembershipName = "Базовый (4 зан.)", RemainingSessions = "2 зан." }
+            new() { Id = 1, FullName = "Соколов Дмитрий Андреевич", Phone = "+7 (903) 412-55-10", SkillLevel = "Спортсмен (конкур)", DiscountRate = 15m, MembershipName = ClubLogic.GetMembershipLabel(15m), RemainingSessions = "1 зан." },
+            new() { Id = 2, FullName = "Волкова Мария Игоревна", Phone = "+7 (916) 784-19-22", SkillLevel = "Опытный всадник", DiscountRate = 10m, MembershipName = ClubLogic.GetMembershipLabel(10m), RemainingSessions = "1 зан." },
+            new() { Id = 3, FullName = "Кузнецов Артём Олегович", Phone = "+7 (925) 330-81-04", SkillLevel = "Начинающий", DiscountRate = 0m, MembershipName = ClubLogic.GetMembershipLabel(0m), RemainingSessions = "1 зан." },
+            new() { Id = 4, FullName = "Лебедева Екатерина Павловна", Phone = "+7 (905) 619-40-77", SkillLevel = "Льготный / Безлимит", DiscountRate = 20m, MembershipName = ClubLogic.GetMembershipLabel(20m), RemainingSessions = "1 зан." },
+            new() { Id = 5, FullName = "Морозов Илья Викторович", Phone = "+7 (985) 207-93-18", SkillLevel = "Любитель", DiscountRate = 5m, MembershipName = ClubLogic.GetMembershipLabel(5m), RemainingSessions = "0 зан." },
+            new() { Id = 6, FullName = "Ткаченко Кирилл Александрович", Phone = "+7 (900) 555-23-23", SkillLevel = "Начинающий", DiscountRate = 0m, MembershipName = ClubLogic.GetMembershipLabel(0m), RemainingSessions = "0 зан." }
         };
 
         var today = DateTime.Today;
@@ -519,7 +554,8 @@ public class MockClubData
         {
             new() { Id = 1, RoleId = 1, RoleName = "Главный берейтор-зоотехник", Login = "bereitor", FullName = "Орлов Алексей Викторович", OfflinePasswordHash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" },
             new() { Id = 2, RoleId = 2, RoleName = "Администратор манежа", Login = "admin", FullName = "Иванова Анна Сергеевна", OfflinePasswordHash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" },
-            new() { Id = 3, RoleId = 3, RoleName = "Клиент", Login = "client", FullName = "Петров Максим Игоревич", OfflinePasswordHash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" }
+            new() { Id = 3, RoleId = 3, RoleName = "Клиент", Login = "client", FullName = "Петров Максим Игоревич", OfflinePasswordHash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" },
+            new() { Id = 4, RoleId = 3, RoleName = "Клиент", Login = "Pokuz", FullName = "Ткаченко Кирилл Александрович", OfflinePasswordHash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" }
         };
 
         Requests = new List<ClientRequestItem>
@@ -558,6 +594,67 @@ public class MockClubData
                 Comment = "Размер L на время занятия",
                 Status = "На рассмотрении",
                 CreatedAt = today.AddHours(9).AddMinutes(10)
+            },
+            new()
+            {
+                Id = 3,
+                UserId = 4,
+                RequesterName = "Ткаченко Кирилл Александрович",
+                RequestType = "Запрос скидки",
+                TargetName = "Любитель",
+                HorseId = null,
+                ArenaZone = "Скидка 5%",
+                DurationMinutes = 0,
+                HasTrainer = false,
+                RequestedDateTime = today.AddHours(12),
+                EstimatedCost = 0m,
+                Comment = "Прошел вводный курс, прошу перевести на уровень Любитель",
+                EquipmentCode = "+7 (900) 555-23-23",
+                Status = "На рассмотрении",
+                CreatedAt = today.AddHours(12)
+            }
+        };
+
+        Penalties = new List<PenaltyItem>
+        {
+            new()
+            {
+                Id = 1,
+                RiderName = "Кузнецов Артём Олегович",
+                IssuedByName = "Иванова Анна Сергеевна",
+                IssuerRole = "Администратор манежа",
+                Category = "Задержка / переработка времени",
+                Reason = "Превышение времени катания в манеже (+20 мин сверх смены)",
+                TargetObject = "ПР23-КСК-2026-00003",
+                Amount = 1000m,
+                Status = "Не оплачен",
+                CreatedAt = today.AddHours(15)
+            },
+            new()
+            {
+                Id = 2,
+                RiderName = "Морозов Илья Викторович",
+                IssuedByName = "Орлов Алексей Викторович",
+                IssuerRole = "Главный берейтор-зоотехник",
+                Category = "Самовольное кормление / денник",
+                Reason = "Кормление лошади запрещённым угощением без согласования",
+                TargetObject = "Зевс (Д-04)",
+                Amount = 1500m,
+                Status = "Не оплачен",
+                CreatedAt = today.AddHours(13)
+            },
+            new()
+            {
+                Id = 3,
+                RiderName = "Ткаченко Кирилл Александрович",
+                IssuedByName = "Орлов Алексей Викторович",
+                IssuerRole = "Главный берейтор-зоотехник",
+                Category = "Нарушение правил конюшни",
+                Reason = "Оставлена незакрытая калитка левады после осмотра лошадей",
+                TargetObject = "Левада №1 / Д-02",
+                Amount = 1000m,
+                Status = "Не оплачен",
+                CreatedAt = today.AddHours(11)
             }
         };
     }
@@ -620,5 +717,23 @@ public class MockClubData
     {
         double hours = GetHorseDailyMinutes(horseId, date) / 60.0;
         return $"{hours:0.0} / 3.0 ч";
+    }
+
+    public ClubRider? FindRiderByName(string fullName)
+    {
+        return Riders.FirstOrDefault(r => r.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public decimal GetRiderDiscount(string fullName)
+    {
+        return FindRiderByName(fullName)?.DiscountRate ?? 0m;
+    }
+
+    public int GetRiderSessionCount(int? riderId, string fullName)
+    {
+        return Orders.Count(o =>
+            o.Status != ClubLogic.OrderStatuses.CancelledVet
+            && ((riderId.HasValue && o.ClubRiderId == riderId.Value)
+                || o.RiderName.Equals(fullName, StringComparison.OrdinalIgnoreCase)));
     }
 }

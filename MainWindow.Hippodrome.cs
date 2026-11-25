@@ -13,6 +13,7 @@ public partial class MainWindow
     private string _hippoSearchQuery = string.Empty;
     private string _hippoVetFilter = "Все";
     private string _stallStatusFilter = "Все";
+    private string _zootechPenaltyFilter = "Все";
 
     // Страница Ипподром
 
@@ -120,6 +121,18 @@ public partial class MainWindow
             tabButtons.Children.Add(CreateHippoSubTabButton("Лошади клуба", 0));
             tabButtons.Children.Add(CreateHippoSubTabButton("Денники и постой", 1));
         }
+        else if (IsZootech)
+        {
+            if (_hippoTabIndex > 3) _hippoTabIndex = 0;
+            int stableUnpaid = _data.Penalties.Count(p =>
+                p.IssuerRole == "Главный берейтор-зоотехник" && p.Status == "Не оплачен");
+            string penTab = stableUnpaid > 0 ? $"Штрафы (конюшня) ({stableUnpaid})" : "Штрафы (конюшня)";
+
+            tabButtons.Children.Add(CreateHippoSubTabButton("Лошади и ветдопуск", 0));
+            tabButtons.Children.Add(CreateHippoSubTabButton("Денники и постой", 1));
+            tabButtons.Children.Add(CreateHippoSubTabButton("Рационы кормления", 2));
+            tabButtons.Children.Add(CreateHippoSubTabButton(penTab, 3));
+        }
         else
         {
             if (_hippoTabIndex > 2) _hippoTabIndex = 0;
@@ -152,6 +165,16 @@ public partial class MainWindow
             {
                 0 => BuildHippoHorsesTab(),
                 _ => BuildHippoStallsTab()
+            };
+        }
+        else if (IsZootech)
+        {
+            tableContainer.Child = _hippoTabIndex switch
+            {
+                0 => BuildHippoHorsesTab(),
+                1 => BuildHippoStallsTab(),
+                2 => BuildHippoRationsTab(),
+                _ => BuildZootechPenaltiesTab()
             };
         }
         else
@@ -237,7 +260,7 @@ public partial class MainWindow
         Grid.SetRow(toolbar, 0);
         grid.Children.Add(toolbar);
 
-        const string cols = "1.15*,1.4*,145,130,130,175";
+        const string cols = "1.15*,1.4*,145,130,130,220";
         var header = CreateTableHeader(cols, new[]
         {
             ("Кличка / Масть", 0),
@@ -420,7 +443,23 @@ public partial class MainWindow
                             : $"{horse.Nickname}: отправлена на веткарантин (запись в манеж закрыта)");
                         ShowHippodromePage();
                     };
-                    actionControl = btnToggleVet;
+
+                    var btnPenalty = new Button { Content = "Штраф" };
+                    btnPenalty.Classes.Add("table-secondary");
+                    ToolTip.SetTip(btnPenalty, "Выписать штраф за нарушение режима содержания или травму лошади");
+                    btnPenalty.Click += (_, _) => OpenIssuePenaltyModal(
+                        "Главный берейтор-зоотехник",
+                        null,
+                        $"{horse.Nickname} ({horse.PassportChipCode})",
+                        "Травма / перегрузка лошади");
+
+                    actionControl = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 5,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Children = { btnToggleVet, btnPenalty }
+                    };
                 }
                 else if (IsClient)
                 {
@@ -1236,5 +1275,212 @@ public partial class MainWindow
         });
 
         ShowModal(box);
+    }
+
+    // Вкладка штрафов по конюшне и лошадям (Главный берейтор-зоотехник)
+
+    private Control BuildZootechPenaltiesTab()
+    {
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,Auto,*"),
+            RowSpacing = 10
+        };
+
+        var toolbar = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            ColumnSpacing = 10
+        };
+
+        var searchBox = new TextBox
+        {
+            PlaceholderText = "Поиск по клиенту, лошади, деннику или причине...",
+            Text = _hippoSearchQuery
+        };
+        searchBox.Classes.Add("compact");
+
+        var filterCombo = new ComboBox
+        {
+            Width = 175,
+            ItemsSource = new[] { "Все", "Не оплачен", "Оплачен", "Списан" },
+            SelectedItem = _zootechPenaltyFilter
+        };
+        filterCombo.Classes.Add("compact");
+
+        var btnIssue = new Button { Content = "+ Выписать штраф (конюшня)" };
+        btnIssue.Classes.Add("compact");
+        btnIssue.Click += (_, _) => OpenIssuePenaltyModal("Главный берейтор-зоотехник");
+
+        Grid.SetColumn(searchBox, 0);
+        Grid.SetColumn(filterCombo, 1);
+        Grid.SetColumn(btnIssue, 2);
+        toolbar.Children.Add(searchBox);
+        toolbar.Children.Add(filterCombo);
+        toolbar.Children.Add(btnIssue);
+
+        Grid.SetRow(toolbar, 0);
+        grid.Children.Add(toolbar);
+
+        const string cols = "105,1.25*,1.25*,1.65*,1.1*,100,120";
+        var header = CreateTableHeader(cols, new[]
+        {
+            ("Дата", 0),
+            ("Всадник / Клиент", 1),
+            ("Категория", 2),
+            ("Причина нарушения", 3),
+            ("Лошадь / Денник", 4),
+            ("Сумма", 5),
+            ("Статус оплаты", 6)
+        }, darkStyle: true);
+
+        Grid.SetRow(header, 1);
+        grid.Children.Add(header);
+
+        var rowsHost = new StackPanel { Spacing = 0 };
+        var scroller = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = rowsHost
+        };
+        Grid.SetRow(scroller, 2);
+        grid.Children.Add(scroller);
+
+        void PopulateRows()
+        {
+            rowsHost.Children.Clear();
+            string q = _hippoSearchQuery.Trim();
+
+            var filtered = _data.Penalties.Where(p =>
+            {
+                if (p.IssuerRole != "Главный берейтор-зоотехник")
+                    return false;
+                if (_zootechPenaltyFilter != "Все" && p.Status != _zootechPenaltyFilter)
+                    return false;
+                if (string.IsNullOrEmpty(q))
+                    return true;
+                return p.RiderName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || p.Category.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || p.Reason.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || p.TargetObject.Contains(q, StringComparison.OrdinalIgnoreCase);
+            })
+            .OrderBy(p => p.Status == "Не оплачен" ? 0 : 1)
+            .ThenByDescending(p => p.CreatedAt)
+            .ToList();
+
+            if (filtered.Count == 0)
+            {
+                rowsHost.Children.Add(new TextBlock
+                {
+                    Text = "Штрафов по конюшне и содержанию лошадей не зафиксировано.",
+                    Foreground = _textMutedBrown,
+                    FontSize = 13,
+                    Margin = new Thickness(14, 20)
+                });
+                return;
+            }
+
+            for (int idx = 0; idx < filtered.Count; idx++)
+            {
+                var p = filtered[idx];
+                var rowGrid = new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions(cols),
+                    ColumnSpacing = 8,
+                    Margin = new Thickness(14, 10)
+                };
+
+                var cDate = new TextBlock
+                {
+                    Text = p.CreatedAt.ToString("dd.MM.yyyy"),
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cRider = new TextBlock
+                {
+                    Text = p.RiderName,
+                    FontSize = 13,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cCat = new TextBlock
+                {
+                    Text = p.Category,
+                    FontSize = 12,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = _textMediumBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cReason = new TextBlock
+                {
+                    Text = p.Reason,
+                    FontSize = 12,
+                    Foreground = _textDarkBrown,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cTarget = new TextBlock
+                {
+                    Text = p.TargetObject,
+                    FontSize = 12,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = _textDarkBrown,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cAmount = new TextBlock
+                {
+                    Text = ClubLogic.FormatMoney(p.Amount),
+                    FontSize = 12.5,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = p.Status == "Не оплачен" ? Brush.Parse("#9F1239") : _textDarkBrown,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var cStatus = CreatePenaltyStatusBadge(p.Status);
+
+                Grid.SetColumn(cDate, 0);
+                Grid.SetColumn(cRider, 1);
+                Grid.SetColumn(cCat, 2);
+                Grid.SetColumn(cReason, 3);
+                Grid.SetColumn(cTarget, 4);
+                Grid.SetColumn(cAmount, 5);
+                Grid.SetColumn(cStatus, 6);
+
+                rowGrid.Children.Add(cDate);
+                rowGrid.Children.Add(cRider);
+                rowGrid.Children.Add(cCat);
+                rowGrid.Children.Add(cReason);
+                rowGrid.Children.Add(cTarget);
+                rowGrid.Children.Add(cAmount);
+                rowGrid.Children.Add(cStatus);
+
+                rowsHost.Children.Add(new Border
+                {
+                    Background = idx % 2 == 0 ? _hippoCardBg : Brush.Parse("#F3ECE4"),
+                    BorderBrush = Brush.Parse("#E2D5C8"),
+                    BorderThickness = new Thickness(0, 0, 0, 1),
+                    Child = rowGrid
+                });
+            }
+        }
+
+        searchBox.TextChanged += (_, _) =>
+        {
+            _hippoSearchQuery = searchBox.Text ?? string.Empty;
+            PopulateRows();
+        };
+
+        filterCombo.SelectionChanged += (_, _) =>
+        {
+            _zootechPenaltyFilter = filterCombo.SelectedItem?.ToString() ?? "Все";
+            PopulateRows();
+        };
+
+        PopulateRows();
+        return grid;
     }
 }
