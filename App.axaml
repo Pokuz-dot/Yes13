@@ -220,22 +220,23 @@
             <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
-        <!-- Мини-кнопки таймера смены -->
+        <!-- Мини-кнопки таймера смены в нижней статусной строке -->
         <Style Selector="Button.timer-btn">
-            <Setter Property="Background" Value="#4E342E"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="CornerRadius" Value="12"/>
-            <Setter Property="Height" Value="26"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Background" Value="#DDD0C2"/>
+            <Setter Property="Foreground" Value="#5D4037"/>
+            <Setter Property="BorderBrush" Value="#C7B7A8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="7,0"/>
         </Style>
 
         <Style Selector="Button.timer-btn:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#E65100"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="TextBlock.Foreground" Value="White"/>
+            <Setter Property="Background" Value="#EFE7DE"/>
+            <Setter Property="BorderBrush" Value="#8D6E63"/>
+            <Setter Property="TextBlock.Foreground" Value="#3E2723"/>
         </Style>
 
         <!-- Вкладки страницы Клуб Аллюр (округлые светлые пилюли) -->

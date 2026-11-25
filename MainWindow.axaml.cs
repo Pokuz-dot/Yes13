@@ -1,6 +1,11 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -78,6 +83,11 @@ public partial class MainWindow : Window
 
         BtnTimerToggle.Click += (_, _) => ToggleShiftTimer();
         BtnTimerReset.Click += (_, _) => ResetShiftTimer();
+        BtnTimerSound.Click += (_, _) =>
+        {
+            PlayShiftFinishedSound();
+            ShowToast("Звуковой сигнал: проверка окончания смены");
+        };
         TimerValueText.PointerPressed += (_, _) => SwitchTimerMode();
 
         ModalOverlay.PointerPressed += (_, e) =>
@@ -108,6 +118,7 @@ public partial class MainWindow : Window
             _shiftTimer.Stop();
             BtnTimerToggle.Content = "Старт";
         }
+        UpdateTimerDisplay();
     }
 
     private void ResetShiftTimer()
@@ -157,25 +168,167 @@ public partial class MainWindow : Window
         else if (_isShiftTimerRunning)
             TimerValueText.Foreground = _accentOrange;
         else
-            TimerValueText.Foreground = _textDarkBrown;
+            TimerValueText.Foreground = _textMediumBrown;
     }
+
+    private static readonly object _soundLock = new();
+    private static string? _bellWavPath;
+
+    [DllImport("winmm.dll", EntryPoint = "PlaySoundW", CharSet = CharSet.Unicode)]
+    private static extern bool WinPlaySound(string pszSound, IntPtr hmod, uint fdwSound);
 
     private static void PlayShiftFinishedSound()
     {
-        try
+        Task.Run(() =>
         {
-            if (OperatingSystem.IsWindows())
+            try
             {
-                Console.Beep(880, 300);
-                Console.Beep(1046, 420);
-            }
-            else
-            {
+                string? wavPath = EnsureShiftBellWav();
+
+                if (OperatingSystem.IsWindows())
+                {
+                    const uint SND_ASYNC = 0x0001;
+                    const uint SND_NODEFAULT = 0x0002;
+                    const uint SND_FILENAME = 0x00020000;
+
+                    if (wavPath != null && WinPlaySound(wavPath, IntPtr.Zero, SND_FILENAME | SND_ASYNC | SND_NODEFAULT))
+                        return;
+
+                    Console.Beep(880, 260);
+                    Console.Beep(1109, 360);
+                    return;
+                }
+
+                if (OperatingSystem.IsMacOS())
+                {
+                    if (wavPath != null && TryRunAudioCommand("afplay", wavPath))
+                        return;
+                    Console.Beep();
+                    return;
+                }
+
+                if (wavPath != null)
+                {
+                    if (TryRunAudioCommand("paplay", wavPath)
+                        || TryRunAudioCommand("pw-play", wavPath)
+                        || TryRunAudioCommand("aplay", "-q", wavPath)
+                        || TryRunAudioCommand("ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", wavPath)
+                        || TryRunAudioCommand("mpv", "--no-video", "--really-quiet", wavPath)
+                        || TryRunAudioCommand("gst-play-1.0", "--quiet", wavPath)
+                        || TryRunAudioCommand("play", "-q", wavPath))
+                    {
+                        return;
+                    }
+                }
+
+                if (TryRunAudioCommand("canberra-gtk-play", "-i", "complete")
+                    || TryRunAudioCommand("canberra-gtk-play", "-i", "bell"))
+                {
+                    return;
+                }
+
                 Console.Beep();
             }
+            catch
+            {
+            }
+        });
+    }
+
+    private static bool TryRunAudioCommand(string fileName, params string[] args)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(fileName)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            foreach (string arg in args)
+                psi.ArgumentList.Add(arg);
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+                return false;
+
+            if (!proc.WaitForExit(5000))
+            {
+                try { proc.Kill(); } catch { }
+                return false;
+            }
+
+            return proc.ExitCode == 0;
         }
         catch
         {
+            return false;
+        }
+    }
+
+    private static string? EnsureShiftBellWav()
+    {
+        lock (_soundLock)
+        {
+            try
+            {
+                if (_bellWavPath != null && File.Exists(_bellWavPath) && new FileInfo(_bellWavPath).Length > 44)
+                    return _bellWavPath;
+
+                string path = Path.Combine(Path.GetTempPath(), "allyur_shift_bell.wav");
+                const int sampleRate = 44100;
+                const double durationSec = 0.85;
+                int sampleCount = (int)(sampleRate * durationSec);
+                int dataBytes = sampleCount * 2;
+
+                using var ms = new MemoryStream(44 + dataBytes);
+                using var bw = new BinaryWriter(ms, Encoding.ASCII, leaveOpen: true);
+
+                // RIFF/WAVE PCM 16-bit mono
+                bw.Write(Encoding.ASCII.GetBytes("RIFF"));
+                bw.Write(36 + dataBytes);
+                bw.Write(Encoding.ASCII.GetBytes("WAVE"));
+                bw.Write(Encoding.ASCII.GetBytes("fmt "));
+                bw.Write(16);
+                bw.Write((short)1);
+                bw.Write((short)1);
+                bw.Write(sampleRate);
+                bw.Write(sampleRate * 2);
+                bw.Write((short)2);
+                bw.Write((short)16);
+                bw.Write(Encoding.ASCII.GetBytes("data"));
+                bw.Write(dataBytes);
+
+                for (int i = 0; i < sampleCount; i++)
+                {
+                    double t = (double)i / sampleRate;
+                    double sampleVal;
+                    if (t < 0.36)
+                    {
+                        double env = Math.Min(1.0, t / 0.012) * Math.Exp(-t * 7.5);
+                        sampleVal = (Math.Sin(2.0 * Math.PI * 880.0 * t) + 0.25 * Math.Sin(2.0 * Math.PI * 1760.0 * t)) * env;
+                    }
+                    else
+                    {
+                        double lt = t - 0.36;
+                        double env = Math.Min(1.0, lt / 0.012) * Math.Exp(-lt * 5.8);
+                        sampleVal = (Math.Sin(2.0 * Math.PI * 1108.73 * lt) + 0.25 * Math.Sin(2.0 * Math.PI * 2217.46 * lt)) * env;
+                    }
+
+                    short pcm = (short)Math.Clamp(sampleVal * 18000.0, short.MinValue, short.MaxValue);
+                    bw.Write(pcm);
+                }
+
+                bw.Flush();
+                File.WriteAllBytes(path, ms.ToArray());
+                _bellWavPath = path;
+                return path;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 
@@ -455,6 +608,7 @@ public partial class MainWindow : Window
     private void ShowLogin()
     {
         TopPanel.IsVisible = false;
+        BottomStatusBar.IsVisible = false;
         _profilePopup?.Close();
 
         var formContainer = new StackPanel
@@ -594,6 +748,7 @@ public partial class MainWindow : Window
     private void ShowRegister()
     {
         TopPanel.IsVisible = false;
+        BottomStatusBar.IsVisible = false;
 
         var formContainer = new StackPanel
         {
@@ -748,6 +903,7 @@ public partial class MainWindow : Window
         ShiftTimerBox.IsVisible = !IsClient;
         UpdateProfilePanel();
         TopPanel.IsVisible = true;
+        BottomStatusBar.IsVisible = true;
         if (IsZootech)
             ShowHippodromePage();
         else
