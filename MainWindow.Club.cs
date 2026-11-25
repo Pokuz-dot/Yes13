@@ -4032,7 +4032,7 @@ public partial class MainWindow
             _data.Penalties.Insert(0, penalty);
             CloseModal();
             ShowToast($"Штраф для {riderName} на {ClubLogic.FormatMoney(amount)} оформлен");
-            if (_currentSection == 1)
+            if (BtnHippodrome.Classes.Contains("active"))
                 ShowHippodromePage();
             else
                 ShowClubPage();
