@@ -476,12 +476,12 @@ public class MockClubData
     public List<ManagedUserItem> Users { get; }
     public List<PenaltyItem> Penalties { get; }
 
-    public int NextOrderSequence { get; set; } = 6;
+    public int NextOrderSequence { get; set; } = 20;
     public int NextRiderId { get; set; } = 7;
     public int NextHorseId { get; set; } = 7;
     public int NextEquipmentId { get; set; } = 9;
-    public int NextRequestId { get; set; } = 4;
-    public int NextPenaltyId { get; set; } = 4;
+    public int NextRequestId { get; set; } = 7;
+    public int NextPenaltyId { get; set; } = 8;
 
     public MockClubData()
     {
@@ -497,12 +497,12 @@ public class MockClubData
 
         Riders = new List<ClubRider>
         {
-            new() { Id = 1, FullName = "Соколов Дмитрий Андреевич", Phone = "+7 (903) 412-55-10", SkillLevel = "Спортсмен (конкур)", DiscountRate = 15m, MembershipName = ClubLogic.GetMembershipLabel(15m), RemainingSessions = "1 зан." },
-            new() { Id = 2, FullName = "Волкова Мария Игоревна", Phone = "+7 (916) 784-19-22", SkillLevel = "Опытный всадник", DiscountRate = 10m, MembershipName = ClubLogic.GetMembershipLabel(10m), RemainingSessions = "1 зан." },
+            new() { Id = 1, FullName = "Соколов Дмитрий Андреевич", Phone = "+7 (903) 412-55-10", SkillLevel = "Спортсмен (конкур)", DiscountRate = 15m, MembershipName = ClubLogic.GetMembershipLabel(15m), RemainingSessions = "5 зан." },
+            new() { Id = 2, FullName = "Волкова Мария Игоревна", Phone = "+7 (916) 784-19-22", SkillLevel = "Опытный всадник", DiscountRate = 10m, MembershipName = ClubLogic.GetMembershipLabel(10m), RemainingSessions = "3 зан." },
             new() { Id = 3, FullName = "Кузнецов Артём Олегович", Phone = "+7 (925) 330-81-04", SkillLevel = "Начинающий", DiscountRate = 0m, MembershipName = ClubLogic.GetMembershipLabel(0m), RemainingSessions = "1 зан." },
-            new() { Id = 4, FullName = "Лебедева Екатерина Павловна", Phone = "+7 (905) 619-40-77", SkillLevel = "Льготный / Безлимит", DiscountRate = 20m, MembershipName = ClubLogic.GetMembershipLabel(20m), RemainingSessions = "1 зан." },
-            new() { Id = 5, FullName = "Морозов Илья Викторович", Phone = "+7 (985) 207-93-18", SkillLevel = "Любитель", DiscountRate = 5m, MembershipName = ClubLogic.GetMembershipLabel(5m), RemainingSessions = "0 зан." },
-            new() { Id = 6, FullName = "Ткаченко Кирилл Александрович", Phone = "+7 (900) 555-23-23", SkillLevel = "Начинающий", DiscountRate = 0m, MembershipName = ClubLogic.GetMembershipLabel(0m), RemainingSessions = "0 зан." }
+            new() { Id = 4, FullName = "Лебедева Екатерина Павловна", Phone = "+7 (905) 619-40-77", SkillLevel = "Льготный / Безлимит", DiscountRate = 20m, MembershipName = ClubLogic.GetMembershipLabel(20m), RemainingSessions = "6 зан." },
+            new() { Id = 5, FullName = "Морозов Илья Викторович", Phone = "+7 (985) 207-93-18", SkillLevel = "Любитель", DiscountRate = 5m, MembershipName = ClubLogic.GetMembershipLabel(5m), RemainingSessions = "1 зан." },
+            new() { Id = 6, FullName = "Ткаченко Кирилл Александрович", Phone = "+7 (900) 555-23-23", SkillLevel = "Начинающий", DiscountRate = 0m, MembershipName = ClubLogic.GetMembershipLabel(0m), RemainingSessions = "2 зан." }
         };
 
         var today = DateTime.Today;
@@ -512,7 +512,22 @@ public class MockClubData
             CreateSeedOrder(2, 2026, 2, Riders[1], Horses[1], today.AddHours(11).AddMinutes(30), 45, true, ClubLogic.OrderStatuses.Saddled, "Крытый манеж 1"),
             CreateSeedOrder(3, 2026, 3, Riders[2], Horses[4], today.AddHours(14), 45, true, ClubLogic.OrderStatuses.Booked, "Учебный манеж"),
             CreateSeedOrder(4, 2026, 4, Riders[3], Horses[5], today.AddHours(9), 90, false, ClubLogic.OrderStatuses.Completed, "Открытый плац"),
-            CreateSeedOrder(5, 2026, 5, Riders[4], Horses[3], today.AddHours(16), 45, false, ClubLogic.OrderStatuses.CancelledVet, "Крытый манеж 1", "Ветеринарный карантин копытного сустава")
+            CreateSeedOrder(5, 2026, 5, Riders[4], Horses[3], today.AddHours(16), 45, false, ClubLogic.OrderStatuses.CancelledVet, "Крытый манеж 1", "Ветеринарный карантин копытного сустава"),
+            CreateSeedOrder(6, 2026, 6, Riders[5], Horses[2], today.AddHours(17), 45, true, ClubLogic.OrderStatuses.Booked, "Учебный манеж"),
+            // История посещений постоянных клиентов за прошлые недели
+            CreateSeedOrder(7, 2026, 7, Riders[3], Horses[4], today.AddDays(-2).AddHours(10), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж"),
+            CreateSeedOrder(8, 2026, 8, Riders[0], Horses[0], today.AddDays(-2).AddHours(15), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж"),
+            CreateSeedOrder(9, 2026, 9, Riders[3], Horses[2], today.AddDays(-4).AddHours(11), 45, false, ClubLogic.OrderStatuses.Completed, "Открытый плац"),
+            CreateSeedOrder(10, 2026, 10, Riders[0], Horses[1], today.AddDays(-5).AddHours(16), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж"),
+            CreateSeedOrder(11, 2026, 11, Riders[1], Horses[5], today.AddDays(-5).AddHours(13), 45, true, ClubLogic.OrderStatuses.Completed, "Крытый манеж 1"),
+            CreateSeedOrder(12, 2026, 12, Riders[3], Horses[0], today.AddDays(-7).AddHours(10), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж"),
+            CreateSeedOrder(13, 2026, 13, Riders[5], Horses[4], today.AddDays(-7).AddHours(14), 45, true, ClubLogic.OrderStatuses.Completed, "Учебный манеж"),
+            CreateSeedOrder(14, 2026, 14, Riders[4], Horses[2], today.AddDays(-9).AddHours(12), 45, false, ClubLogic.OrderStatuses.Completed, "Открытый плац"),
+            CreateSeedOrder(15, 2026, 15, Riders[0], Horses[5], today.AddDays(-10).AddHours(17), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж"),
+            CreateSeedOrder(16, 2026, 16, Riders[3], Horses[1], today.AddDays(-11).AddHours(11), 90, false, ClubLogic.OrderStatuses.Completed, "Открытый плац"),
+            CreateSeedOrder(17, 2026, 17, Riders[1], Horses[4], today.AddDays(-12).AddHours(15), 45, true, ClubLogic.OrderStatuses.Completed, "Крытый манеж 1"),
+            CreateSeedOrder(18, 2026, 18, Riders[0], Horses[0], today.AddDays(-14).AddHours(16), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж"),
+            CreateSeedOrder(19, 2026, 19, Riders[3], Horses[5], today.AddDays(-16).AddHours(10), 90, true, ClubLogic.OrderStatuses.Completed, "Конкурный манеж")
         };
 
         Equipment = new List<EquipmentRentalItem>
@@ -612,6 +627,59 @@ public class MockClubData
                 EquipmentCode = "+7 (900) 555-23-23",
                 Status = "На рассмотрении",
                 CreatedAt = today.AddHours(12)
+            },
+            new()
+            {
+                Id = 4,
+                UserId = 4,
+                RequesterName = "Ткаченко Кирилл Александрович",
+                RequestType = "Тренировка и манеж",
+                TargetName = "Альтаир",
+                HorseId = 3,
+                ArenaZone = "Учебный манеж",
+                DurationMinutes = 45,
+                HasTrainer = true,
+                RequestedDateTime = today.AddHours(17),
+                EstimatedCost = 2500m,
+                Comment = "Закрепление посадки на рыси",
+                EquipmentCode = "AUTO",
+                Status = "Одобрено",
+                CreatedAt = today.AddHours(10)
+            },
+            new()
+            {
+                Id = 5,
+                UserId = 3,
+                RequesterName = "Петров Максим Игоревич",
+                RequestType = "Тренировка и манеж",
+                TargetName = "Карамель",
+                HorseId = 5,
+                ArenaZone = "Учебный манеж",
+                DurationMinutes = 45,
+                HasTrainer = true,
+                RequestedDateTime = today.AddDays(-4).AddHours(14),
+                EstimatedCost = 2500m,
+                Comment = "Вводное занятие",
+                Status = "Одобрено",
+                CreatedAt = today.AddDays(-5)
+            },
+            new()
+            {
+                Id = 6,
+                UserId = 4,
+                RequesterName = "Ткаченко Кирилл Александрович",
+                RequestType = "Аренда снаряжения",
+                TargetName = "EQ-006 Краги кожаные Tattini Close",
+                HorseId = null,
+                ArenaZone = "Склад амуниции",
+                DurationMinutes = 45,
+                HasTrainer = false,
+                RequestedDateTime = today.AddDays(1).AddHours(18),
+                EstimatedCost = 180m,
+                Comment = "На завтрашнюю тренировку",
+                EquipmentCode = "EQ-006",
+                Status = "На рассмотрении",
+                CreatedAt = today.AddHours(14)
             }
         };
 
@@ -655,6 +723,58 @@ public class MockClubData
                 Amount = 1000m,
                 Status = "Не оплачен",
                 CreatedAt = today.AddHours(11)
+            },
+            new()
+            {
+                Id = 4,
+                RiderName = "Соколов Дмитрий Андреевич",
+                IssuedByName = "Орлов Алексей Викторович",
+                IssuerRole = "Главный берейтор-зоотехник",
+                Category = "Травма / перегрузка лошади",
+                Reason = "Превышение темпа галопа без разминки по твёрдому грунту",
+                TargetObject = "Буцефал (CHIP-RU-2018-104)",
+                Amount = 2500m,
+                Status = "Оплачен",
+                CreatedAt = today.AddDays(-1).AddHours(18)
+            },
+            new()
+            {
+                Id = 5,
+                RiderName = "Лебедева Екатерина Павловна",
+                IssuedByName = "Иванова Анна Сергеевна",
+                IssuerRole = "Администратор манежа",
+                Category = "Опоздание / неявка на бронь",
+                Reason = "Неявка на вечернюю смену без отмены за 3 часа",
+                TargetObject = "ПР23-КСК-2026-00012 (Буцефал)",
+                Amount = 800m,
+                Status = "Оплачен",
+                CreatedAt = today.AddDays(-5).AddHours(19)
+            },
+            new()
+            {
+                Id = 6,
+                RiderName = "Волкова Мария Игоревна",
+                IssuedByName = "Иванова Анна Сергеевна",
+                IssuerRole = "Администратор манежа",
+                Category = "Порча снаряжения",
+                Reason = "Повреждение ремешка застёжки на защитном шлеме",
+                TargetObject = "EQ-002 Шлем защитный Uvex Perfexxion II",
+                Amount = 1200m,
+                Status = "Не оплачен",
+                CreatedAt = today.AddHours(11)
+            },
+            new()
+            {
+                Id = 7,
+                RiderName = "Ткаченко Кирилл Александрович",
+                IssuedByName = "Иванова Анна Сергеевна",
+                IssuerRole = "Администратор манежа",
+                Category = "Порча снаряжения",
+                Reason = "Утерян запасной фиксатор стремени после занятия",
+                TargetObject = "EQ-003 Шлем тренировочный Fouganza C500",
+                Amount = 650m,
+                Status = "Оплачен",
+                CreatedAt = today.AddDays(-7).AddHours(17)
             }
         };
     }
