@@ -271,10 +271,15 @@ public static class ClubLogic
         };
     }
 
-    public static void TransitionOrderStatus(RidingOrder order, string nextStatus, bool horseReadyForTraining, string? cancelReason = null)
+    public static void EnsureOrderEditable(RidingOrder order)
     {
         if (IsClosedStatus(order.Status))
             throw new InvalidOperationException($"Нельзя изменить закрытый документ ({order.Status}).");
+    }
+
+    public static void TransitionOrderStatus(RidingOrder order, string nextStatus, bool horseReadyForTraining, string? cancelReason = null)
+    {
+        EnsureOrderEditable(order);
 
         if (nextStatus != OrderStatuses.CancelledVet && !horseReadyForTraining)
             throw new InvalidOperationException("Назначение лошади заблокировано: отсутствует ветеринарный допуск.");
@@ -289,18 +294,69 @@ public static class ClubLogic
                 : cancelReason.Trim();
     }
 
+    public static decimal RecalculateOrderTotal(RidingOrder order)
+    {
+        return Math.Round(order.Items.Sum(i => i.ItemCost), 2, MidpointRounding.AwayFromZero);
+    }
+
+    public static void AddSessionItem(RidingOrder order, RidingSessionItem item, bool horseReadyForTraining, int existingHorseDailyMinutes = 0)
+    {
+        EnsureOrderEditable(order);
+
+        if (!horseReadyForTraining)
+            throw new InvalidOperationException("Назначение лошади заблокировано: отсутствует ветеринарный допуск.");
+
+        if (existingHorseDailyMinutes + item.DurationMinutes > 180)
+            throw new InvalidOperationException("Превышен суточный лимит нагрузки лошади (не более 3 часов в сутки).");
+
+        item.ItemCost = CalculateSessionCost(item.DurationMinutes, item.HasTrainer, order.RiderDiscount);
+        item.OrderId = order.Id;
+        order.Items.Add(item);
+        order.TotalPrice = RecalculateOrderTotal(order);
+    }
+
+    public static decimal CalculateUnpaidPenaltiesTotal(IEnumerable<PenaltyItem> penalties, string? riderName = null)
+    {
+        return penalties
+            .Where(p => p.Status == "Не оплачен"
+                && (string.IsNullOrWhiteSpace(riderName) || p.RiderName.Equals(riderName, StringComparison.OrdinalIgnoreCase)))
+            .Sum(p => p.Amount);
+    }
+
+    public static bool TryParseSessionTime(string? text, out TimeSpan time)
+    {
+        time = default;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        string trimmed = text.Trim();
+        if (!TimeSpan.TryParseExact(trimmed, new[] { @"hh\:mm", @"h\:mm" }, CultureInfo.InvariantCulture, out time))
+            return false;
+
+        return time >= TimeSpan.FromHours(7) && time <= TimeSpan.FromHours(22);
+    }
+
+    public static string BuildIntegritySourceString(string orderNum, DateTime orderDate, string counterparty, decimal totalPrice, int itemCount)
+    {
+        string dateText = orderDate.ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture);
+        string totalText = totalPrice.ToString("F2", CultureInfo.InvariantCulture);
+        return $"[{orderNum}]+[{dateText}]+[{counterparty}]+[{totalText}]+[{itemCount}]";
+    }
+
     public static string ComputeDocumentSha256(string orderNum, DateTime orderDate, string counterparty, decimal totalPrice, int itemCount)
     {
-        string raw = $"{orderNum}{orderDate:dd.MM.yyyy HH:mm}{counterparty}{totalPrice.ToString("F2", CultureInfo.InvariantCulture)}{itemCount}";
+        string dateText = orderDate.ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture);
+        string totalText = totalPrice.ToString("F2", CultureInfo.InvariantCulture);
+        string raw = $"{orderNum}{dateText}{counterparty}{totalText}{itemCount}";
         byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     public static string BuildRouteSheetText(RidingOrder order, IEnumerable<EquipmentRentalItem>? rentedEquipment = null)
     {
-        string dateText = order.OrderDate.ToString("dd.MM.yyyy HH:mm");
+        string dateText = order.OrderDate.ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture);
         string sha = ComputeDocumentSha256(order.OrderNum, order.OrderDate, order.RiderName, order.TotalPrice, order.Items.Count);
-        string sourceConcat = $"[{order.OrderNum}]+[{dateText}]+[{order.RiderName}]+[{order.TotalPrice:F2}]+[{order.Items.Count}]";
+        string sourceConcat = BuildIntegritySourceString(order.OrderNum, order.OrderDate, order.RiderName, order.TotalPrice, order.Items.Count);
 
         var sb = new StringBuilder();
         sb.AppendLine("КСК И ИППОДРОМ «АЛЛЮР»");
@@ -480,7 +536,7 @@ public class MockClubData
     public int NextRiderId { get; set; } = 7;
     public int NextHorseId { get; set; } = 7;
     public int NextEquipmentId { get; set; } = 9;
-    public int NextRequestId { get; set; } = 7;
+    public int NextRequestId { get; set; } = 8;
     public int NextPenaltyId { get; set; } = 8;
 
     public MockClubData()
@@ -680,6 +736,23 @@ public class MockClubData
                 EquipmentCode = "EQ-006",
                 Status = "На рассмотрении",
                 CreatedAt = today.AddHours(14)
+            },
+            new()
+            {
+                Id = 7,
+                UserId = 3,
+                RequesterName = "Петров Максим Игоревич",
+                RequestType = "Бронь денника",
+                TargetName = "Д-08 (Крыло Б)",
+                HorseId = null,
+                ArenaZone = "Стандарт",
+                DurationMinutes = 0,
+                HasTrainer = false,
+                RequestedDateTime = today.AddDays(2).AddHours(10),
+                EstimatedCost = 0m,
+                Comment = "Гром — постой на 1 месяц",
+                Status = "На рассмотрении",
+                CreatedAt = today.AddHours(15)
             }
         };
 

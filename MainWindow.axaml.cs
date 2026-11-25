@@ -48,6 +48,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _toastTimer;
     private Popup? _profilePopup;
     private TextBlock? _lastTooltipCheckedBlock;
+    private DispatcherTimer? _loginLockTimer;
+    private DateTime _loginLockoutUntil = DateTime.MinValue;
+    private int _failedLoginAttempts;
 
     private int _clubTabIndex;
     private int _hippoTabIndex;
@@ -610,10 +613,11 @@ public partial class MainWindow : Window
         TopPanel.IsVisible = false;
         BottomStatusBar.IsVisible = false;
         _profilePopup?.Close();
+        _loginLockTimer?.Stop();
 
         var formContainer = new StackPanel
         {
-            Width = 330,
+            Width = 340,
             Spacing = 0,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
@@ -647,15 +651,54 @@ public partial class MainWindow : Window
         var txtPassword = new TextBox
         {
             PlaceholderText = "Введите пароль...",
-            PasswordChar = '•',
+            PasswordChar = '*'
+        };
+
+        var btnTogglePwd = new Button
+        {
+            Content = "Показ",
+            Height = 45,
+            MinWidth = 74
+        };
+        btnTogglePwd.Classes.Add("secondary");
+        ToolTip.SetTip(btnTogglePwd, "Показать или скрыть пароль");
+
+        bool passwordVisible = false;
+        btnTogglePwd.Click += (_, _) =>
+        {
+            passwordVisible = !passwordVisible;
+            txtPassword.PasswordChar = passwordVisible ? '\0' : '*';
+            btnTogglePwd.Content = passwordVisible ? "Скрыть" : "Показ";
+        };
+
+        var passwordRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
             Margin = new Thickness(0, 22, 0, 0)
         };
+        Grid.SetColumn(txtPassword, 0);
+        Grid.SetColumn(btnTogglePwd, 1);
+        passwordRow.Children.Add(txtPassword);
+        passwordRow.Children.Add(btnTogglePwd);
 
         var btnLogin = new Button
         {
             Content = "Войти",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Margin = new Thickness(0, 26, 0, 0)
+        };
+
+        var lockoutBanner = new TextBlock
+        {
+            FontSize = 12,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = Brush.Parse("#C62828"),
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(0, 10, 0, 0),
+            IsVisible = false
         };
 
         var linkRegister = new TextBlock
@@ -668,8 +711,67 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 15, 0, 0)
         };
 
+        void ApplyLockoutUi()
+        {
+            int left = (int)Math.Ceiling((_loginLockoutUntil - DateTime.UtcNow).TotalSeconds);
+            if (left > 0)
+            {
+                txtLogin.IsEnabled = false;
+                txtPassword.IsEnabled = false;
+                btnTogglePwd.IsEnabled = false;
+                btnLogin.IsEnabled = false;
+                btnLogin.Content = $"Заблокировано ({left} с)";
+                lockoutBanner.Text = $"Превышено число неверных попыток. Повторный ввод через {left} с.";
+                lockoutBanner.IsVisible = true;
+            }
+            else
+            {
+                _loginLockTimer?.Stop();
+                _failedLoginAttempts = 0;
+                txtLogin.IsEnabled = true;
+                txtPassword.IsEnabled = true;
+                btnTogglePwd.IsEnabled = true;
+                btnLogin.IsEnabled = true;
+                btnLogin.Content = "Войти";
+                lockoutBanner.IsVisible = false;
+            }
+        }
+
+        void EnsureLockoutTimerRunning()
+        {
+            _loginLockTimer?.Stop();
+            _loginLockTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _loginLockTimer.Tick += (_, _) => ApplyLockoutUi();
+            _loginLockTimer.Start();
+            ApplyLockoutUi();
+        }
+
+        void RegisterFailedAttempt(Control errorTarget, string errorMessage)
+        {
+            _failedLoginAttempts++;
+            if (_failedLoginAttempts >= 3)
+            {
+                _loginLockoutUntil = DateTime.UtcNow.AddSeconds(10);
+                EnsureLockoutTimerRunning();
+                ShowToast("Интерфейс входа заблокирован на 10 секунд");
+                return;
+            }
+
+            int remaining = 3 - _failedLoginAttempts;
+            ShowPopupError(errorTarget, $"{errorMessage} (осталось попыток: {remaining})");
+        }
+
+        if (_loginLockoutUntil > DateTime.UtcNow)
+            EnsureLockoutTimerRunning();
+
         btnLogin.Click += (_, _) =>
         {
+            if (_loginLockoutUntil > DateTime.UtcNow)
+            {
+                ApplyLockoutUi();
+                return;
+            }
+
             string login = (txtLogin.Text ?? string.Empty).Trim();
             string password = txtPassword.Text ?? string.Empty;
 
@@ -690,10 +792,13 @@ public partial class MainWindow : Window
             {
                 if (dbUser == null)
                 {
-                    ShowPopupError(txtPassword, dbError);
+                    RegisterFailedAttempt(txtPassword, dbError);
                     return;
                 }
 
+                _failedLoginAttempts = 0;
+                _loginLockoutUntil = DateTime.MinValue;
+                _loginLockTimer?.Stop();
                 _data.CurrentUser = dbUser;
                 Database.LoadAll(_data, out _);
                 OnLoginSuccess();
@@ -707,16 +812,20 @@ public partial class MainWindow : Window
 
             if (offlineMatch == null)
             {
-                ShowPopupError(txtLogin, "Пользователь не найден (или проверьте MySQL)");
+                RegisterFailedAttempt(txtLogin, "Пользователь не найден (или проверьте MySQL)");
                 return;
             }
 
             if (!string.IsNullOrEmpty(offlineMatch.OfflinePasswordHash)
                 && !string.Equals(offlineMatch.OfflinePasswordHash, Database.HashPassword(password), StringComparison.OrdinalIgnoreCase))
             {
-                ShowPopupError(txtPassword, "Неверный пароль");
+                RegisterFailedAttempt(txtPassword, "Неверный пароль");
                 return;
             }
+
+            _failedLoginAttempts = 0;
+            _loginLockoutUntil = DateTime.MinValue;
+            _loginLockTimer?.Stop();
 
             _data.CurrentUser = new UserProfile
             {
@@ -731,13 +840,18 @@ public partial class MainWindow : Window
             ShowToast("MySQL недоступна, открыт автономный режим");
         };
 
-        linkRegister.PointerPressed += (_, _) => ShowRegister();
+        linkRegister.PointerPressed += (_, _) =>
+        {
+            _loginLockTimer?.Stop();
+            ShowRegister();
+        };
 
         formContainer.Children.Add(title);
         formContainer.Children.Add(subtitle);
         formContainer.Children.Add(txtLogin);
-        formContainer.Children.Add(txtPassword);
+        formContainer.Children.Add(passwordRow);
         formContainer.Children.Add(btnLogin);
+        formContainer.Children.Add(lockoutBanner);
         formContainer.Children.Add(linkRegister);
 
         MainContent.Content = formContainer;
@@ -891,7 +1005,7 @@ public partial class MainWindow : Window
         return new TextBox
         {
             PlaceholderText = placeholder,
-            PasswordChar = isPassword ? '•' : '\0',
+            PasswordChar = isPassword ? '*' : '\0',
             Margin = new Thickness(0, 10, 0, 0)
         };
     }

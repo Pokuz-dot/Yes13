@@ -126,12 +126,15 @@ public partial class MainWindow
         else if (IsZootech)
         {
             if (_hippoTabIndex > 3) _hippoTabIndex = 0;
+            int pendingStalls = _data.Requests.Count(r =>
+                r.RequestType == "Бронь денника" && r.Status == "На рассмотрении");
+            string stallsTab = pendingStalls > 0 ? $"Денники и постой ({pendingStalls})" : "Денники и постой";
             int stableUnpaid = _data.Penalties.Count(p =>
                 p.IssuerRole == "Главный берейтор-зоотехник" && p.Status == "Не оплачен");
             string penTab = stableUnpaid > 0 ? $"Штрафы (конюшня) ({stableUnpaid})" : "Штрафы (конюшня)";
 
             tabButtons.Children.Add(CreateHippoSubTabButton("Лошади и ветдопуск", 0));
-            tabButtons.Children.Add(CreateHippoSubTabButton("Денники и постой", 1));
+            tabButtons.Children.Add(CreateHippoSubTabButton(stallsTab, 1));
             tabButtons.Children.Add(CreateHippoSubTabButton("Рационы кормления", 2));
             tabButtons.Children.Add(CreateHippoSubTabButton(penTab, 3));
         }
@@ -668,11 +671,133 @@ public partial class MainWindow
 
     private Control BuildHippoStallsTab()
     {
+        var pendingStallRequests = IsZootech
+            ? _data.Requests
+                .Where(r => r.RequestType == "Бронь денника" && r.Status == "На рассмотрении")
+                .OrderByDescending(r => r.CreatedAt)
+                .ToList()
+            : new System.Collections.Generic.List<ClientRequestItem>();
+
+        bool hasPending = pendingStallRequests.Count > 0;
         var grid = new Grid
         {
-            RowDefinitions = new RowDefinitions("Auto,Auto,*"),
+            RowDefinitions = hasPending
+                ? new RowDefinitions("Auto,Auto,Auto,*")
+                : new RowDefinitions("Auto,Auto,*"),
             RowSpacing = 10
         };
+
+        int rowOffset = 0;
+        if (hasPending)
+        {
+            var reqListPanel = new StackPanel { Spacing = 6 };
+            foreach (var req in pendingStallRequests)
+            {
+                var reqRow = new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                    ColumnSpacing = 10
+                };
+
+                var info = new StackPanel
+                {
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Spacing = 2,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = $"{req.TargetName} • {req.RequesterName}",
+                            FontSize = 12.5,
+                            FontWeight = FontWeight.Bold,
+                            Foreground = _textDarkBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        },
+                        new TextBlock
+                        {
+                            Text = $"Заезд с {req.RequestedDateTime:dd.MM.yyyy} • {(string.IsNullOrWhiteSpace(req.Comment) ? "Постой" : req.Comment)}",
+                            FontSize = 11.5,
+                            Foreground = _textMediumBrown,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        }
+                    }
+                };
+
+                var btnAccept = new Button { Content = "Одобрить бронь" };
+                btnAccept.Classes.Add("table-success");
+                btnAccept.Click += (_, _) => ApproveClientRequest(req);
+
+                var btnReject = new Button { Content = "Отклонить" };
+                btnReject.Classes.Add("table-danger");
+                btnReject.Click += (_, _) =>
+                {
+                    if (!Database.UpdateClientRequestStatus(req.Id, "Отклонено", out string err))
+                    {
+                        ShowToast($"Ошибка БД: {err}");
+                        return;
+                    }
+                    req.Status = "Отклонено";
+                    ShowToast($"Заявка на бронь денника от {req.RequesterName} отклонена");
+                    ShowHippodromePage();
+                };
+
+                var btns = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Children = { btnAccept, btnReject }
+                };
+
+                Grid.SetColumn(info, 0);
+                Grid.SetColumn(btns, 1);
+                reqRow.Children.Add(info);
+                reqRow.Children.Add(btns);
+
+                reqListPanel.Children.Add(new Border
+                {
+                    Background = Brushes.White,
+                    BorderBrush = _borderSand,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(10, 7),
+                    Child = reqRow
+                });
+            }
+
+            var reqBanner = new Border
+            {
+                Background = Brush.Parse("#FFF8F1"),
+                BorderBrush = Brush.Parse("#FFCC80"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12, 10),
+                Child = new StackPanel
+                {
+                    Spacing = 8,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = $"Входящие заявки на бронь денника ({pendingStallRequests.Count})",
+                            FontSize = 13,
+                            FontWeight = FontWeight.Bold,
+                            Foreground = _accentOrange
+                        },
+                        new ScrollViewer
+                        {
+                            MaxHeight = 145,
+                            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                            Content = reqListPanel
+                        }
+                    }
+                }
+            };
+
+            Grid.SetRow(reqBanner, 0);
+            grid.Children.Add(reqBanner);
+            rowOffset = 1;
+        }
 
         var toolbar = new Grid
         {
@@ -700,7 +825,7 @@ public partial class MainWindow
         toolbar.Children.Add(searchBox);
         toolbar.Children.Add(filterCombo);
 
-        Grid.SetRow(toolbar, 0);
+        Grid.SetRow(toolbar, rowOffset);
         grid.Children.Add(toolbar);
 
         const string cols = "80,1.2*,1.2*,1.35*,115,115,155";
@@ -715,7 +840,7 @@ public partial class MainWindow
             ("Действие", 6)
         }, darkStyle: true);
 
-        Grid.SetRow(header, 1);
+        Grid.SetRow(header, rowOffset + 1);
         grid.Children.Add(header);
 
         var rowsHost = new StackPanel { Spacing = 0 };
@@ -724,7 +849,7 @@ public partial class MainWindow
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = rowsHost
         };
-        Grid.SetRow(scroller, 2);
+        Grid.SetRow(scroller, rowOffset + 2);
         grid.Children.Add(scroller);
 
         void PopulateRows()
@@ -950,7 +1075,7 @@ public partial class MainWindow
         var txtComment = new TextBox { PlaceholderText = "Предполагаемый срок заезда и пожелания" };
         txtComment.Classes.Add("compact");
 
-        var btnSend = new Button { Content = "Отправить заявку админу" };
+        var btnSend = new Button { Content = "Отправить заявку зоотехнику" };
         btnSend.Classes.Add("compact");
         var btnCancel = new Button { Content = "Отмена" };
         btnCancel.Classes.Add("secondary");
@@ -992,7 +1117,7 @@ public partial class MainWindow
 
             _data.Requests.Insert(0, req);
             CloseModal();
-            ShowToast($"Заявка на денник {stall.StallCode} отправлена администратору");
+            ShowToast($"Заявка на денник {stall.StallCode} отправлена главному берейтору-зоотехнику");
             ShowHippodromePage();
         };
 

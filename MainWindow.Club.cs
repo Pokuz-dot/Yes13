@@ -1,11 +1,14 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 
 namespace Avalo;
 
@@ -58,7 +61,7 @@ public partial class MainWindow
         }
         else
         {
-            int pendingCount = _data.Requests.Count(r => r.Status == "На рассмотрении");
+            int pendingCount = _data.Requests.Count(r => r.Status == "На рассмотрении" && r.RequestType != "Бронь денника");
             int activeSessions = _data.Orders.Count(o => !ClubLogic.IsClosedStatus(o.Status));
             int rentedEquip = _data.Equipment.Count(e => e.Status == "В аренде");
 
@@ -168,7 +171,7 @@ public partial class MainWindow
         else if (IsArenaAdmin)
         {
             if (_clubTabIndex > 5) _clubTabIndex = 0;
-            int pending = _data.Requests.Count(r => r.Status == "На рассмотрении");
+            int pending = _data.Requests.Count(r => r.Status == "На рассмотрении" && r.RequestType != "Бронь денника");
             string reqTabTitle = pending > 0 ? $"Заявки клиентов ({pending})" : "Заявки клиентов";
             int unpaidPenalties = _data.Penalties.Count(p => p.Status == "Не оплачен");
             string penTabTitle = unpaidPenalties > 0 ? $"Штрафы и нарушения ({unpaidPenalties})" : "Штрафы и нарушения";
@@ -710,26 +713,35 @@ public partial class MainWindow
 
                 if (req.Status == "На рассмотрении")
                 {
-                    var btnAccept = new Button { Content = "Принять" };
-                    btnAccept.Classes.Add("table-success");
-                    btnAccept.Click += (_, _) => ApproveClientRequest(req);
-
-                    var btnReject = new Button { Content = "Отклонить" };
-                    btnReject.Classes.Add("table-danger");
-                    btnReject.Click += (_, _) =>
+                    if (req.RequestType == "Бронь денника")
                     {
-                        if (!Database.UpdateClientRequestStatus(req.Id, "Отклонено", out string err))
-                        {
-                            ShowToast($"Ошибка БД: {err}");
-                            return;
-                        }
-                        req.Status = "Отклонено";
-                        ShowToast($"Заявка от {req.RequesterName} отклонена");
-                        ShowClubPage();
-                    };
+                        var zootechNote = CreateBadge("Ведение зоотехника", "#EFEBE9", "#6D4C41", "#D7CCC8");
+                        ToolTip.SetTip(zootechNote, "Бронирование денников рассматривает только главный берейтор-зоотехник в разделе «Ипподром → Денники и постой»");
+                        actionPanel.Children.Add(zootechNote);
+                    }
+                    else
+                    {
+                        var btnAccept = new Button { Content = "Принять" };
+                        btnAccept.Classes.Add("table-success");
+                        btnAccept.Click += (_, _) => ApproveClientRequest(req);
 
-                    actionPanel.Children.Add(btnAccept);
-                    actionPanel.Children.Add(btnReject);
+                        var btnReject = new Button { Content = "Отклонить" };
+                        btnReject.Classes.Add("table-danger");
+                        btnReject.Click += (_, _) =>
+                        {
+                            if (!Database.UpdateClientRequestStatus(req.Id, "Отклонено", out string err))
+                            {
+                                ShowToast($"Ошибка БД: {err}");
+                                return;
+                            }
+                            req.Status = "Отклонено";
+                            ShowToast($"Заявка от {req.RequesterName} отклонена");
+                            ShowClubPage();
+                        };
+
+                        actionPanel.Children.Add(btnAccept);
+                        actionPanel.Children.Add(btnReject);
+                    }
                 }
                 else
                 {
@@ -786,6 +798,18 @@ public partial class MainWindow
 
     private void ApproveClientRequest(ClientRequestItem req)
     {
+        if (req.RequestType == "Бронь денника" && !IsZootech)
+        {
+            ShowToast("Бронирование денников одобряет только главный берейтор-зоотехник");
+            return;
+        }
+
+        if (req.RequestType != "Бронь денника" && !IsArenaAdmin)
+        {
+            ShowToast("Одобрение клубных заявок доступно только администратору манежа");
+            return;
+        }
+
         string autoDetails = string.Empty;
 
         if (req.RequestType == "Тренировка и манеж")
@@ -895,16 +919,30 @@ public partial class MainWindow
             var stall = _data.Stalls.FirstOrDefault(s =>
                 req.TargetName.StartsWith(s.StallCode, StringComparison.OrdinalIgnoreCase));
 
-            if (stall != null)
+            if (stall == null)
             {
-                stall.Status = "Забронирован";
-                stall.OwnerOrBoardingType = req.RequesterName;
-                stall.HorseName = string.IsNullOrWhiteSpace(req.Comment) ? "Бронь клиента" : req.Comment;
-                stall.BreedName = "По заявке";
-                stall.ReservedUntil = $"с {req.RequestedDateTime:dd.MM.yyyy}";
-                Database.UpdateStall(stall, out _);
-                autoDetails = $" | Денник {stall.StallCode} забронирован автоматически";
+                ShowToast($"Денник по заявке ({req.TargetName}) не найден");
+                return;
             }
+
+            if (stall.Status != "Свободен")
+            {
+                ShowToast($"Денник {stall.StallCode} уже имеет статус «{stall.Status}» — бронь невозможна");
+                return;
+            }
+
+            stall.Status = "Забронирован";
+            stall.OwnerOrBoardingType = req.RequesterName;
+            stall.HorseName = string.IsNullOrWhiteSpace(req.Comment) ? "Бронь клиента" : req.Comment;
+            stall.BreedName = "По заявке";
+            stall.ReservedUntil = $"с {req.RequestedDateTime:dd.MM.yyyy}";
+            if (!Database.UpdateStall(stall, out string stallErr))
+            {
+                ShowToast($"Ошибка обновления денника в БД: {stallErr}");
+                return;
+            }
+
+            autoDetails = $" | Денник {stall.StallCode} забронирован";
         }
         else if (req.RequestType == "Запрос скидки")
         {
@@ -942,7 +980,10 @@ public partial class MainWindow
 
         req.Status = "Одобрено";
         ShowToast($"Заявка от {req.RequesterName} одобрена{autoDetails}");
-        ShowClubPage();
+        if (IsZootech)
+            ShowHippodromePage();
+        else
+            ShowClubPage();
     }
 
     private void OpenDiscountRequestModal()
@@ -1131,6 +1172,13 @@ public partial class MainWindow
         };
         commentInput.Classes.Add("compact");
 
+        var horseStatusNote = new TextBlock
+        {
+            FontSize = 12,
+            Foreground = _textMediumBrown,
+            TextWrapping = TextWrapping.Wrap
+        };
+
         var costPreview = new TextBlock
         {
             FontSize = 15,
@@ -1175,14 +1223,28 @@ public partial class MainWindow
 
         void RefreshCost()
         {
-            decimal trainingCost = ClubLogic.CalculateSessionCost(SelectedMinutes(), chkTrainer.IsChecked == true, clientDiscount);
+            int minutes = SelectedMinutes();
+            decimal trainingCost = ClubLogic.CalculateSessionCost(minutes, chkTrainer.IsChecked == true, clientDiscount);
             decimal eqCost = SelectedEquipmentCost();
             string discTag = clientDiscount > 0 ? $" (скидка {clientDiscount:0}%)" : string.Empty;
             costPreview.Text = eqCost > 0
                 ? $"Предварительно{discTag}: {ClubLogic.FormatMoney(trainingCost)} + снаряжение {ClubLogic.FormatMoney(eqCost)}"
                 : $"Предварительная стоимость{discTag}: {ClubLogic.FormatMoney(trainingCost)}";
+
+            if (horseCombo.SelectedItem is HorseItem horse)
+            {
+                int usedMin = _data.GetHorseDailyMinutes(horse.Id, DateTime.Today);
+                bool exceeds = usedMin + minutes > 180;
+                horseStatusNote.Text = exceeds
+                    ? $"Нагрузка лошади сегодня: {usedMin / 60.0:0.0} / 3.0 ч — превышение суточного лимита! Выберите другую лошадь или длительность"
+                    : $"Нагрузка лошади сегодня: {usedMin / 60.0:0.0} / 3.0 ч (доступно {Math.Max(0, 180 - usedMin)} мин)";
+                horseStatusNote.Foreground = !horse.IsReadyForTraining || exceeds
+                    ? Brush.Parse("#C62828")
+                    : _textMediumBrown;
+            }
         }
 
+        horseCombo.SelectionChanged += (_, _) => RefreshCost();
         durationCombo.SelectionChanged += (_, _) => RefreshCost();
         chkTrainer.IsCheckedChanged += (_, _) => RefreshCost();
         equipCombo.SelectionChanged += (_, _) => RefreshCost();
@@ -1194,7 +1256,7 @@ public partial class MainWindow
             ColumnSpacing = 12
         };
         var leftField = CreateFormField("Длительность", durationCombo);
-        var rightField = CreateFormField("Желаемое время", timeInput);
+        var rightField = CreateFormField("Желаемое время (сегодня)", timeInput);
         Grid.SetColumn(leftField, 0);
         Grid.SetColumn(rightField, 1);
         formRow.Children.Add(leftField);
@@ -1211,11 +1273,27 @@ public partial class MainWindow
             if (horseCombo.SelectedItem is not HorseItem horse)
                 return;
 
-            DateTime dt = DateTime.Today.AddHours(16);
-            if (TimeSpan.TryParse(timeInput.Text?.Trim(), out var parsed))
-                dt = DateTime.Today.Add(parsed);
+            if (!horse.IsReadyForTraining)
+            {
+                ShowPopupError(horseCombo, "Лошадь на веткарантине!");
+                return;
+            }
 
+            if (!ClubLogic.TryParseSessionTime(timeInput.Text, out var parsed))
+            {
+                ShowPopupError(timeInput, "Укажите время ЧЧ:ММ (07:00–22:00)");
+                return;
+            }
+
+            DateTime dt = DateTime.Today.Add(parsed);
             int minutes = SelectedMinutes();
+            int usedMin = _data.GetHorseDailyMinutes(horse.Id, dt.Date);
+            if (usedMin + minutes > 180)
+            {
+                ShowPopupError(horseCombo, $"Лимит 3 ч/сутки превышен (занято {usedMin} мин)!");
+                return;
+            }
+
             bool hasTrainer = chkTrainer.IsChecked == true;
             decimal cost = ClubLogic.CalculateSessionCost(minutes, hasTrainer, clientDiscount);
             string eqCode = SelectedEquipmentCode();
@@ -1260,6 +1338,7 @@ public partial class MainWindow
         box.Children.Add(chkTrainer);
         box.Children.Add(CreateFormField("Снаряжение (автобронь при одобрении)", equipCombo));
         box.Children.Add(CreateFormField("Комментарий", commentInput));
+        box.Children.Add(horseStatusNote);
         box.Children.Add(costPreview);
         box.Children.Add(new StackPanel
         {
@@ -1300,9 +1379,13 @@ public partial class MainWindow
 
         btnSend.Click += (_, _) =>
         {
-            DateTime dt = DateTime.Today.AddHours(16);
-            if (TimeSpan.TryParse(timeInput.Text?.Trim(), out var parsed))
-                dt = DateTime.Today.Add(parsed);
+            if (!ClubLogic.TryParseSessionTime(timeInput.Text, out var parsed))
+            {
+                ShowPopupError(timeInput, "Укажите время ЧЧ:ММ (07:00–22:00)");
+                return;
+            }
+
+            DateTime dt = DateTime.Today.Add(parsed);
 
             var req = new ClientRequestItem
             {
@@ -2122,9 +2205,13 @@ public partial class MainWindow
                 return;
             }
 
-            DateTime sessionDt = DateTime.Today.AddHours(15);
-            if (TimeSpan.TryParse(timeInput.Text?.Trim(), out var parsedTime))
-                sessionDt = DateTime.Today.Add(parsedTime);
+            if (!ClubLogic.TryParseSessionTime(timeInput.Text, out var parsedTime))
+            {
+                ShowPopupError(timeInput, "Укажите время ЧЧ:ММ (07:00–22:00)");
+                return;
+            }
+
+            DateTime sessionDt = DateTime.Today.Add(parsedTime);
 
             bool hasTrainer = chkTrainer.IsChecked == true;
             decimal cost = ClubLogic.CalculateSessionCost(duration, hasTrainer, rider.DiscountRate);
@@ -2199,7 +2286,7 @@ public partial class MainWindow
 
         var reasonBox = new TextBox
         {
-            PlaceholderText = "Причина отмены (например: осмотр копытного сустава)..."
+            PlaceholderText = "Укажите причину отмены (не менее 10 символов)..."
         };
         reasonBox.Classes.Add("compact");
 
@@ -2211,13 +2298,20 @@ public partial class MainWindow
 
         btnConfirm.Click += (_, _) =>
         {
+            string reason = (reasonBox.Text ?? string.Empty).Trim();
+            if (reason.Length < 10)
+            {
+                ShowPopupError(reasonBox, "Укажите причину (не менее 10 символов)");
+                return;
+            }
+
             try
             {
                 ClubLogic.TransitionOrderStatus(
                     order,
                     ClubLogic.OrderStatuses.CancelledVet,
                     horseReadyForTraining: true,
-                    cancelReason: reasonBox.Text);
+                    cancelReason: reason);
                 foreach (var released in ClubLogic.ReleaseOrderEquipment(_data.Equipment, order.OrderNum))
                     Database.UpdateEquipmentStatus(released, out _);
                 if (!Database.UpdateOrderStatus(order, out string dbErr))
@@ -2249,8 +2343,8 @@ public partial class MainWindow
     {
         var rentedForOrder = _data.Equipment.Where(e => e.OrderNum == order.OrderNum).ToList();
         string docText = ClubLogic.BuildRouteSheetText(order, rentedForOrder);
-        string dateText = order.OrderDate.ToString("dd.MM.yyyy HH:mm");
-        string sourceConcat = $"[{order.OrderNum}]+[{dateText}]+[{order.RiderName}]+[{order.TotalPrice:F2}]+[{order.Items.Count}]";
+        string dateText = order.OrderDate.ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture);
+        string sourceConcat = ClubLogic.BuildIntegritySourceString(order.OrderNum, order.OrderDate, order.RiderName, order.TotalPrice, order.Items.Count);
         string sha = ClubLogic.ComputeDocumentSha256(order.OrderNum, order.OrderDate, order.RiderName, order.TotalPrice, order.Items.Count);
 
         var box = new StackPanel { Spacing = 12 };
@@ -2577,21 +2671,71 @@ public partial class MainWindow
             TextWrapping = TextWrapping.Wrap
         };
 
-        var btnExport = new Button { Content = "Выгрузить в файл (.txt)" };
+        var btnExport = new Button { Content = "Сохранить в файл (.txt)..." };
         btnExport.Classes.Add("compact");
         var btnClose = new Button { Content = "Закрыть" };
         btnClose.Classes.Add("secondary");
         btnClose.Click += (_, _) => CloseModal();
 
-        btnExport.Click += (_, _) =>
+        btnExport.Click += async (_, _) =>
         {
-            string exportDir = Path.Combine(AppContext.BaseDirectory, "Exports");
-            Directory.CreateDirectory(exportDir);
-            string filePath = Path.Combine(exportDir, $"{order.OrderNum}.txt");
-            File.WriteAllText(filePath, docText);
-            savedLabel.Text = $"Документ выгружен: {filePath}";
-            savedLabel.IsVisible = true;
-            ShowToast($"Экспортирован файл {order.OrderNum}.txt");
+            try
+            {
+                var sp = TopLevel.GetTopLevel(this)?.StorageProvider;
+                if (sp != null && sp.CanSave)
+                {
+                    IStorageFolder? startFolder = null;
+                    try
+                    {
+                        startFolder = await sp.TryGetWellKnownFolderAsync(WellKnownFolder.Documents);
+                    }
+                    catch
+                    {
+                    }
+
+                    var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
+                    {
+                        Title = "Сохранить маршрутный лист тренировки (SHA-256)",
+                        SuggestedFileName = $"{order.OrderNum}.txt",
+                        DefaultExtension = "txt",
+                        SuggestedStartLocation = startFolder,
+                        FileTypeChoices = new[] { FilePickerFileTypes.TextPlain, FilePickerFileTypes.All },
+                        ShowOverwritePrompt = true
+                    });
+
+                    if (file == null)
+                        return;
+
+                    await using (var stream = await file.OpenWriteAsync())
+                    {
+                        if (stream.CanSeek)
+                            stream.SetLength(0);
+                        await using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                        await writer.WriteAsync(docText);
+                    }
+
+                    string savedPath = file.TryGetLocalPath() ?? file.Path.LocalPath;
+                    savedLabel.Text = $"Документ сохранён: {savedPath}";
+                    savedLabel.IsVisible = true;
+                    ShowToast($"Маршрутный лист сохранён: {Path.GetFileName(savedPath)}");
+                    return;
+                }
+
+                string docsDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                string exportDir = !string.IsNullOrWhiteSpace(docsDir)
+                    ? Path.Combine(docsDir, "AllyurExports")
+                    : Path.Combine(AppContext.BaseDirectory, "Exports");
+                Directory.CreateDirectory(exportDir);
+                string filePath = Path.Combine(exportDir, $"{order.OrderNum}.txt");
+                await File.WriteAllTextAsync(filePath, docText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                savedLabel.Text = $"Документ сохранён: {filePath}";
+                savedLabel.IsVisible = true;
+                ShowToast($"Экспортирован файл {order.OrderNum}.txt");
+            }
+            catch (Exception ex)
+            {
+                ShowToast($"Ошибка сохранения файла: {ex.Message}");
+            }
         };
 
         box.Children.Add(savedLabel);
