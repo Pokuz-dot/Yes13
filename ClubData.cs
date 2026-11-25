@@ -378,14 +378,16 @@ public static class ClubLogic
         return booked;
     }
 
-    public static void ReleaseOrderEquipment(List<EquipmentRentalItem> equipment, string orderNum)
+    public static List<EquipmentRentalItem> ReleaseOrderEquipment(List<EquipmentRentalItem> equipment, string orderNum)
     {
-        foreach (var item in equipment.Where(e => e.Status == "В аренде" && e.OrderNum == orderNum))
+        var released = equipment.Where(e => e.Status == "В аренде" && e.OrderNum == orderNum).ToList();
+        foreach (var item in released)
         {
             item.Status = "Свободно";
             item.RentedByRider = "-";
             item.OrderNum = "-";
         }
+        return released;
     }
 }
 

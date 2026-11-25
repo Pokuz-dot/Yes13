@@ -824,6 +824,13 @@ public partial class MainWindow
             _data.Orders.Insert(0, order);
 
             var bookedCodes = ClubLogic.AutoAssignEquipment(_data.Equipment, req.EquipmentCode, req.RequesterName, order.OrderNum);
+            foreach (var code in bookedCodes)
+            {
+                var eq = _data.Equipment.FirstOrDefault(e => e.InventoryCode == code);
+                if (eq != null)
+                    Database.UpdateEquipmentStatus(eq, out _);
+            }
+
             autoDetails = bookedCodes.Count > 0
                 ? $" | Заказ {order.OrderNum} + автобронь снаряжения: {string.Join(", ", bookedCodes)}"
                 : $" | Заказ {order.OrderNum} создан автоматически";
@@ -843,6 +850,7 @@ public partial class MainWindow
                 equip.Status = "В аренде";
                 equip.RentedByRider = req.RequesterName;
                 equip.OrderNum = activeOrder?.OrderNum ?? "Аренда по заявке";
+                Database.UpdateEquipmentStatus(equip, out _);
                 autoDetails = $" | {equip.InventoryCode} автоматически выдан в аренду";
             }
         }
@@ -858,6 +866,7 @@ public partial class MainWindow
                 stall.HorseName = string.IsNullOrWhiteSpace(req.Comment) ? "Бронь клиента" : req.Comment;
                 stall.BreedName = "По заявке";
                 stall.ReservedUntil = $"с {req.RequestedDateTime:dd.MM.yyyy}";
+                Database.UpdateStall(stall, out _);
                 autoDetails = $" | Денник {stall.StallCode} забронирован автоматически";
             }
         }
@@ -1696,7 +1705,10 @@ public partial class MainWindow
                             {
                                 ClubLogic.TransitionOrderStatus(order, nextStatus, ready);
                                 if (ClubLogic.IsClosedStatus(order.Status))
-                                    ClubLogic.ReleaseOrderEquipment(_data.Equipment, order.OrderNum);
+                                {
+                                    foreach (var released in ClubLogic.ReleaseOrderEquipment(_data.Equipment, order.OrderNum))
+                                        Database.UpdateEquipmentStatus(released, out _);
+                                }
                                 if (!Database.UpdateOrderStatus(order, out string dbErr))
                                     ShowToast($"Ошибка БД: {dbErr}");
                                 else
@@ -2021,7 +2033,8 @@ public partial class MainWindow
                     ClubLogic.OrderStatuses.CancelledVet,
                     horseReadyForTraining: true,
                     cancelReason: reasonBox.Text);
-                ClubLogic.ReleaseOrderEquipment(_data.Equipment, order.OrderNum);
+                foreach (var released in ClubLogic.ReleaseOrderEquipment(_data.Equipment, order.OrderNum))
+                    Database.UpdateEquipmentStatus(released, out _);
                 if (!Database.UpdateOrderStatus(order, out string dbErr))
                     ShowToast($"Ошибка БД: {dbErr}");
                 else
@@ -2642,6 +2655,7 @@ public partial class MainWindow
                             item.Status = "Свободно";
                             item.RentedByRider = "-";
                             item.OrderNum = "-";
+                            Database.UpdateEquipmentStatus(item, out _);
                             ShowToast($"{item.InventoryCode}: снаряжение возвращено на склад");
                             ShowClubPage();
                         };
@@ -2654,6 +2668,7 @@ public partial class MainWindow
                         btnApprove.Click += (_, _) =>
                         {
                             item.Status = "Свободно";
+                            Database.UpdateEquipmentStatus(item, out _);
                             ShowToast($"{item.InventoryCode}: проверка пройдена");
                             ShowClubPage();
                         };
@@ -2758,6 +2773,7 @@ public partial class MainWindow
             item.Status = "В аренде";
             item.RentedByRider = rider.FullName;
             item.OrderNum = selectedOrder == "Без привязки к заказу" ? "Разовая аренда" : selectedOrder;
+            Database.UpdateEquipmentStatus(item, out _);
 
             CloseModal();
             ShowToast($"{item.InventoryCode} выдан: {rider.FullName}");
@@ -2816,7 +2832,7 @@ public partial class MainWindow
             if (rate <= 0) rate = 300m;
 
             int id = _data.NextEquipmentId++;
-            _data.Equipment.Add(new EquipmentRentalItem
+            var newEquip = new EquipmentRentalItem
             {
                 Id = id,
                 InventoryCode = $"EQ-{id:D3}",
@@ -2827,10 +2843,18 @@ public partial class MainWindow
                 Status = "Свободно",
                 RentedByRider = "-",
                 OrderNum = "-"
-            });
+            };
+
+            if (!Database.AddEquipment(newEquip, out string dbErr))
+            {
+                ShowToast($"Ошибка БД: {dbErr}");
+                return;
+            }
+
+            _data.Equipment.Add(newEquip);
 
             CloseModal();
-            ShowToast($"Добавлено снаряжение EQ-{id:D3}");
+            ShowToast($"Добавлено снаряжение {newEquip.InventoryCode}");
             ShowClubPage();
         };
 

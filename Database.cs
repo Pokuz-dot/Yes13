@@ -67,13 +67,76 @@ public static class Database
               AND TABLE_NAME = 'client_requests'
               AND COLUMN_NAME = 'equipment_code';";
 
-        using var colCheckCmd = new MySqlCommand(checkColSql, conn);
-        long hasCol = Convert.ToInt64(colCheckCmd.ExecuteScalar());
-        if (hasCol == 0)
+        using (var colCheckCmd = new MySqlCommand(checkColSql, conn))
         {
-            using var alterCmd = new MySqlCommand("ALTER TABLE client_requests ADD COLUMN equipment_code varchar(40) DEFAULT NULL;", conn);
-            alterCmd.ExecuteNonQuery();
+            long hasCol = Convert.ToInt64(colCheckCmd.ExecuteScalar());
+            if (hasCol == 0)
+            {
+                using var alterCmd = new MySqlCommand("ALTER TABLE client_requests ADD COLUMN equipment_code varchar(40) DEFAULT NULL;", conn);
+                alterCmd.ExecuteNonQuery();
+            }
         }
+
+        const string equipTableSql = @"
+            CREATE TABLE IF NOT EXISTS equipment_items (
+              id int(11) NOT NULL AUTO_INCREMENT,
+              inventory_code varchar(30) NOT NULL,
+              name varchar(150) NOT NULL,
+              category varchar(60) NOT NULL,
+              size varchar(60) NOT NULL,
+              price_per_hour decimal(10,2) NOT NULL DEFAULT 0.00,
+              status varchar(40) NOT NULL DEFAULT 'Свободно',
+              rented_by_rider varchar(150) NOT NULL DEFAULT '-',
+              order_num varchar(40) NOT NULL DEFAULT '-',
+              PRIMARY KEY (id),
+              UNIQUE KEY inventory_code (inventory_code)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
+
+        using (var eqCmd = new MySqlCommand(equipTableSql, conn))
+        {
+            eqCmd.ExecuteNonQuery();
+        }
+
+        const string stallsTableSql = @"
+            CREATE TABLE IF NOT EXISTS stalls (
+              id int(11) NOT NULL AUTO_INCREMENT,
+              stall_code varchar(30) NOT NULL,
+              wing_section varchar(80) NOT NULL,
+              stall_type varchar(80) NOT NULL,
+              horse_id int(11) DEFAULT NULL,
+              horse_name varchar(120) NOT NULL DEFAULT 'Свободен',
+              breed_name varchar(100) NOT NULL DEFAULT '-',
+              owner_or_boarding_type varchar(150) NOT NULL DEFAULT '-',
+              reserved_until varchar(60) NOT NULL DEFAULT '-',
+              status varchar(40) NOT NULL DEFAULT 'Свободен',
+              PRIMARY KEY (id),
+              UNIQUE KEY stall_code (stall_code),
+              KEY fk_stalls_horse (horse_id),
+              CONSTRAINT fk_stalls_horse FOREIGN KEY (horse_id) REFERENCES horses (id) ON DELETE SET NULL ON UPDATE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
+
+        using (var stCmd = new MySqlCommand(stallsTableSql, conn))
+        {
+            stCmd.ExecuteNonQuery();
+        }
+
+        const string rationsTableSql = @"
+            CREATE TABLE IF NOT EXISTS feeding_rations (
+              id int(11) NOT NULL AUTO_INCREMENT,
+              horse_id int(11) NOT NULL,
+              horse_name varchar(120) NOT NULL,
+              stall_code varchar(30) NOT NULL,
+              morning_feed varchar(200) NOT NULL,
+              day_feed varchar(200) NOT NULL,
+              evening_feed varchar(200) NOT NULL,
+              diet_note varchar(120) NOT NULL,
+              PRIMARY KEY (id),
+              KEY fk_rations_horse (horse_id),
+              CONSTRAINT fk_rations_horse FOREIGN KEY (horse_id) REFERENCES horses (id) ON DELETE CASCADE ON UPDATE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
+
+        using var ratCmd = new MySqlCommand(rationsTableSql, conn);
+        ratCmd.ExecuteNonQuery();
     }
 
     public static UserProfile? Login(string login, string password, out bool dbAvailable, out string error)
@@ -451,6 +514,103 @@ public static class Database
             data.Requests.AddRange(requests);
             data.NextRequestId = requests.Count > 0 ? requests.Max(r => r.Id) + 1 : 1;
 
+            // 8. Снаряжение
+            var equipment = new List<EquipmentRentalItem>();
+            const string eqSql = @"
+                SELECT id, inventory_code, name, category, size, price_per_hour, status, rented_by_rider, order_num
+                FROM equipment_items
+                ORDER BY id;";
+
+            using (var cmd = new MySqlCommand(eqSql, conn))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    equipment.Add(new EquipmentRentalItem
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        InventoryCode = reader["inventory_code"]?.ToString() ?? string.Empty,
+                        Name = reader["name"]?.ToString() ?? string.Empty,
+                        Category = reader["category"]?.ToString() ?? "Седло",
+                        Size = reader["size"]?.ToString() ?? string.Empty,
+                        PricePerHour = Convert.ToDecimal(reader["price_per_hour"]),
+                        Status = reader["status"]?.ToString() ?? "Свободно",
+                        RentedByRider = reader["rented_by_rider"]?.ToString() ?? "-",
+                        OrderNum = reader["order_num"]?.ToString() ?? "-"
+                    });
+                }
+            }
+            if (equipment.Count > 0)
+            {
+                data.Equipment.Clear();
+                data.Equipment.AddRange(equipment);
+                data.NextEquipmentId = equipment.Max(e => e.Id) + 1;
+            }
+
+            // 9. Денники
+            var stalls = new List<StallItem>();
+            const string stallsSql = @"
+                SELECT id, stall_code, wing_section, stall_type, horse_id, horse_name, breed_name, owner_or_boarding_type, reserved_until, status
+                FROM stalls
+                ORDER BY id;";
+
+            using (var cmd = new MySqlCommand(stallsSql, conn))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    stalls.Add(new StallItem
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        StallCode = reader["stall_code"]?.ToString() ?? string.Empty,
+                        WingSection = reader["wing_section"]?.ToString() ?? string.Empty,
+                        StallType = reader["stall_type"]?.ToString() ?? string.Empty,
+                        HorseId = reader["horse_id"] == DBNull.Value ? null : Convert.ToInt32(reader["horse_id"]),
+                        HorseName = reader["horse_name"]?.ToString() ?? "Свободен",
+                        BreedName = reader["breed_name"]?.ToString() ?? "-",
+                        OwnerOrBoardingType = reader["owner_or_boarding_type"]?.ToString() ?? "-",
+                        ReservedUntil = reader["reserved_until"]?.ToString() ?? "-",
+                        Status = reader["status"]?.ToString() ?? "Свободен"
+                    });
+                }
+            }
+            if (stalls.Count > 0)
+            {
+                data.Stalls.Clear();
+                data.Stalls.AddRange(stalls);
+            }
+
+            // 10. Рационы кормления
+            var rations = new List<FeedingRationItem>();
+            const string rationsSql = @"
+                SELECT id, horse_id, horse_name, stall_code, morning_feed, day_feed, evening_feed, diet_note
+                FROM feeding_rations
+                ORDER BY id;";
+
+            using (var cmd = new MySqlCommand(rationsSql, conn))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    rations.Add(new FeedingRationItem
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        HorseId = Convert.ToInt32(reader["horse_id"]),
+                        HorseName = reader["horse_name"]?.ToString() ?? string.Empty,
+                        StallCode = reader["stall_code"]?.ToString() ?? string.Empty,
+                        MorningFeed = reader["morning_feed"]?.ToString() ?? string.Empty,
+                        DayFeed = reader["day_feed"]?.ToString() ?? string.Empty,
+                        EveningFeed = reader["evening_feed"]?.ToString() ?? string.Empty,
+                        DietNote = reader["diet_note"]?.ToString() ?? string.Empty
+                    });
+                }
+            }
+            if (rations.Count > 0)
+            {
+                data.Rations.Clear();
+                data.Rations.AddRange(rations);
+            }
+
             SyncAuxiliaryTables(data);
             return true;
         }
@@ -795,6 +955,174 @@ public static class Database
             using var cmd = new MySqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@ready", isReady ? 1 : 0);
             cmd.Parameters.AddWithValue("@id", horseId);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool AddEquipment(EquipmentRentalItem item, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = @"
+                INSERT INTO equipment_items (inventory_code, name, category, size, price_per_hour, status, rented_by_rider, order_num)
+                VALUES (@code, @name, @cat, @size, @rate, @status, @rider, @order);";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@code", item.InventoryCode);
+            cmd.Parameters.AddWithValue("@name", item.Name);
+            cmd.Parameters.AddWithValue("@cat", item.Category);
+            cmd.Parameters.AddWithValue("@size", item.Size);
+            cmd.Parameters.AddWithValue("@rate", item.PricePerHour);
+            cmd.Parameters.AddWithValue("@status", item.Status);
+            cmd.Parameters.AddWithValue("@rider", item.RentedByRider);
+            cmd.Parameters.AddWithValue("@order", item.OrderNum);
+            cmd.ExecuteNonQuery();
+            item.Id = (int)cmd.LastInsertedId;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool UpdateEquipmentStatus(EquipmentRentalItem item, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = @"
+                UPDATE equipment_items
+                SET status = @status, rented_by_rider = @rider, order_num = @order
+                WHERE inventory_code = @code;";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@status", item.Status);
+            cmd.Parameters.AddWithValue("@rider", item.RentedByRider);
+            cmd.Parameters.AddWithValue("@order", item.OrderNum);
+            cmd.Parameters.AddWithValue("@code", item.InventoryCode);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool UpdateStall(StallItem stall, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = @"
+                UPDATE stalls
+                SET horse_id = @hid, horse_name = @hname, breed_name = @breed,
+                    owner_or_boarding_type = @owner, reserved_until = @term, status = @status
+                WHERE stall_code = @code;";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@hid", (object?)stall.HorseId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@hname", stall.HorseName);
+            cmd.Parameters.AddWithValue("@breed", stall.BreedName);
+            cmd.Parameters.AddWithValue("@owner", stall.OwnerOrBoardingType);
+            cmd.Parameters.AddWithValue("@term", stall.ReservedUntil);
+            cmd.Parameters.AddWithValue("@status", stall.Status);
+            cmd.Parameters.AddWithValue("@code", stall.StallCode);
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool AddFeedingRation(FeedingRationItem ration, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = @"
+                INSERT INTO feeding_rations (horse_id, horse_name, stall_code, morning_feed, day_feed, evening_feed, diet_note)
+                VALUES (@hid, @hname, @stall, @morning, @day, @evening, @note);";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@hid", ration.HorseId);
+            cmd.Parameters.AddWithValue("@hname", ration.HorseName);
+            cmd.Parameters.AddWithValue("@stall", ration.StallCode);
+            cmd.Parameters.AddWithValue("@morning", ration.MorningFeed);
+            cmd.Parameters.AddWithValue("@day", ration.DayFeed);
+            cmd.Parameters.AddWithValue("@evening", ration.EveningFeed);
+            cmd.Parameters.AddWithValue("@note", ration.DietNote);
+            cmd.ExecuteNonQuery();
+            ration.Id = (int)cmd.LastInsertedId;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool UpdateFeedingRation(FeedingRationItem ration, out string error)
+    {
+        error = string.Empty;
+        if (!IsConnected)
+            return true;
+
+        try
+        {
+            using var conn = new MySqlConnection(ConnectionString);
+            conn.Open();
+
+            const string sql = @"
+                UPDATE feeding_rations
+                SET stall_code = @stall, morning_feed = @morning, day_feed = @day, evening_feed = @evening, diet_note = @note
+                WHERE horse_id = @hid;";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@stall", ration.StallCode);
+            cmd.Parameters.AddWithValue("@morning", ration.MorningFeed);
+            cmd.Parameters.AddWithValue("@day", ration.DayFeed);
+            cmd.Parameters.AddWithValue("@evening", ration.EveningFeed);
+            cmd.Parameters.AddWithValue("@note", ration.DietNote);
+            cmd.Parameters.AddWithValue("@hid", ration.HorseId);
             cmd.ExecuteNonQuery();
             return true;
         }

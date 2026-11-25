@@ -583,7 +583,7 @@ public partial class MainWindow
 
             _data.Horses.Add(newHorse);
 
-            _data.Rations.Add(new FeedingRationItem
+            var newRation = new FeedingRationItem
             {
                 Id = newHorse.Id,
                 HorseId = newHorse.Id,
@@ -593,7 +593,9 @@ public partial class MainWindow
                 DayFeed = "Мюсли 1.0 кг, Сено 4 кг",
                 EveningFeed = "Овёс 2.0 кг, Сено 4.5 кг",
                 DietNote = "Базовый рацион"
-            });
+            };
+            Database.AddFeedingRation(newRation, out _);
+            _data.Rations.Add(newRation);
 
             CloseModal();
             ShowToast($"Лошадь {nickname} добавлена в реестр");
@@ -828,6 +830,7 @@ public partial class MainWindow
                             stall.BreedName = "-";
                             stall.OwnerOrBoardingType = "-";
                             stall.ReservedUntil = "-";
+                            Database.UpdateStall(stall, out _);
                             ShowToast($"Денник {stall.StallCode} освобожден");
                             ShowHippodromePage();
                         };
@@ -1004,10 +1007,14 @@ public partial class MainWindow
             stall.OwnerOrBoardingType = string.IsNullOrWhiteSpace(txtOwner.Text) ? "Частный постой" : txtOwner.Text.Trim();
             stall.ReservedUntil = string.IsNullOrWhiteSpace(txtTerm.Text) ? "Постоянный" : txtTerm.Text.Trim();
             stall.Status = statusCombo.SelectedItem?.ToString() ?? "Забронирован";
+            Database.UpdateStall(stall, out _);
 
             var ration = _data.Rations.FirstOrDefault(r => r.HorseName.Equals(stall.HorseName, StringComparison.OrdinalIgnoreCase));
             if (ration != null)
+            {
                 ration.StallCode = stall.StallCode;
+                Database.UpdateFeedingRation(ration, out _);
+            }
 
             CloseModal();
             ShowToast($"Денник {stall.StallCode}: оформлен ({stall.Status})");
@@ -1209,6 +1216,7 @@ public partial class MainWindow
             ration.DayFeed = (txtDay.Text ?? string.Empty).Trim();
             ration.EveningFeed = (txtEvening.Text ?? string.Empty).Trim();
             ration.DietNote = string.IsNullOrWhiteSpace(txtNote.Text) ? "Стандартный" : txtNote.Text.Trim();
+            Database.UpdateFeedingRation(ration, out _);
 
             CloseModal();
             ShowToast($"Рацион для {ration.HorseName} обновлен");
